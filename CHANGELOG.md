@@ -11,3 +11,9 @@ All notable changes to this project will be documented in this file.
 - Polite throttling and browser-like User-Agent
 - Safe-mode API for network errors
 - Test suite with unit, integration, and optional E2E tests
+
+## [0.1.1] - 2026-02-06
+
+### Changed
+
+- Corrected package metadata (author and repository URLs)

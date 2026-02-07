@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "garys_nyc_events"
-version = "0.1.0"
+version = "0.1.1"
 description = "A polite scraper for NYC tech events from GarysGuide"
-authors = ["Your Name <your@email.com>"]
+authors = ["Andrew Gardner"]
 readme = "README.md"
 license = "MIT"
-homepage = "https://github.com/yourname/garys_nyc_events"
-repository = "https://github.com/yourname/garys_nyc_events"
+homepage = "https://github.com/atg25/GarysGuide-Scraper"
+repository = "https://github.com/atg25/GarysGuide-Scraper"
 keywords = ["events", "nyc", "scraper", "garysguide", "beautifulsoup"]
 include = ["LICENSE", "CHANGELOG.md"]
 classifiers = [

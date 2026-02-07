@@ -9,6 +9,7 @@ build/
 .env
 .venv/
 .test-venv/
+.pypi-verify-venv/
 .idea/
 .vscode/
 .DS_Store
