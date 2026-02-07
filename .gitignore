@@ -10,6 +10,7 @@ build/
 .venv/
 .test-venv/
 .pypi-verify-venv/
+.pypi-release-verify-venv/
 .idea/
 .vscode/
 .DS_Store
