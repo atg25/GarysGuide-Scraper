@@ -1,0 +1,78 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+
+      - name: Verify tag matches version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import sys
+
+          tag = os.environ.get('GITHUB_REF_NAME', '')
+          if not tag:
+              print('Missing GITHUB_REF_NAME')
+              sys.exit(1)
+
+          # Read version from pyproject.toml using tomllib (Py3.11+)
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              data = tomllib.load(f)
+          version = data['tool']['poetry']['version']
+
+          expected = f"v{version}"
+          if tag != expected:
+              print(f"Tag '{tag}' does not match expected '{expected}'")
+              sys.exit(1)
+
+          if not re.match(r"^v\d+\.\d+\.\d+", tag):
+              print(f"Tag '{tag}' is not a semver-like tag")
+              sys.exit(1)
+
+          print(f"Tag '{tag}' matches version '{version}'.")
+          PY
+
+      - name: Install dependencies
+        run: |
+          poetry install
+
+      - name: Run tests
+        run: |
+          poetry run pytest
+
+      - name: Build distributions
+        run: |
+          poetry build
+
+      - name: Twine check
+        run: |
+          poetry run twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
