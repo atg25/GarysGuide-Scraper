@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-02-17
+
+### Added
+
+- SQLite persistence layer with transactional schema (`runs`, `products`, `product_snapshots`)
+- One-shot runner command with retry/backoff and run status classification
+- Cron schedule validation utilities and container cron startup flow
+- Dockerfile + docker-compose scheduler runtime with named volume persistence
+- SQL verification scripts and operations docs (runbook, traceability, checklist)
+- Unit tests for persistence, scheduler validation, retry behavior, and failure/partial run handling
+
 ## [0.1.0] - 2026-02-06
 
 ### Added

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "garys_nyc_events"
-version = "0.1.1"
+version = "0.2.0"
 description = "A polite scraper for NYC tech events from GarysGuide"
 authors = ["Andrew Gardner"]
 readme = "README.md"

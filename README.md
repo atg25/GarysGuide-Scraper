@@ -67,8 +67,8 @@ This repo includes a GitHub Actions workflow that publishes to PyPI when you pus
 3. Create and push a matching tag:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 The workflow verifies the tag matches `v{version}`, runs tests, builds, checks the dist, then publishes.
