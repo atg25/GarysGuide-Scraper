@@ -2,6 +2,13 @@
 
 A polite, dependency-light Python library for extracting NYC tech events from GarysGuide.
 
+This repository also includes a production-oriented data pipeline layer:
+
+- Scrape events
+- Persist to SQLite (`runs`, `products`, `product_snapshots`)
+- Run repeatedly on cron
+- Containerize scheduler + persistence with Docker named volume
+
 ## Features
 
 - Scrapes the GarysGuide events page
@@ -14,6 +21,29 @@ A polite, dependency-light Python library for extracting NYC tech events from Ga
 ```bash
 pip install garys_nyc_events
 ```
+
+## Pipeline Quick Start
+
+### One-shot run (scrape -> persist SQLite)
+
+```bash
+DB_PATH=./local_events.db poetry run garys-events-run-once
+```
+
+### Verify DB
+
+```bash
+DB_PATH=./local_events.db ./scripts/verify_db.sh
+```
+
+### Scheduler in Docker (cron)
+
+```bash
+docker compose up --build -d
+docker compose logs -f scheduler
+```
+
+SQLite data persists in named volume `garys_events_data`.
 
 ## PyPI + Poetry Setup
 
@@ -42,6 +72,26 @@ git push origin v0.1.1
 ```
 
 The workflow verifies the tag matches `v{version}`, runs tests, builds, checks the dist, then publishes.
+
+## Environment Variables (Config Contract)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CRON_SCHEDULE` | `0 */6 * * *` | Cron schedule for recurring runs |
+| `TZ` | `UTC` | Timezone for cron runtime |
+| `SCRAPER_STRATEGY` | `web` | Scraper mode (currently `web`) |
+| `SCRAPER_SEARCH_TERM` | empty | Optional keyword filter on event title |
+| `SCRAPER_LIMIT` | `0` | Max events per run (`0` = no limit) |
+| `DB_PATH` | `/data/garys_events.db` | SQLite file path |
+| `RETRY_ATTEMPTS` | `3` | Retries for transient failures |
+| `RETRY_BACKOFF_SECONDS` | `5` | Linear backoff base seconds |
+| `API_TOKEN` | empty | Reserved for future API strategy |
+
+Run statuses written to `runs.status`:
+
+- `success`: no error
+- `partial`: some data + error
+- `failure`: no data + error
 
 ### Publish to TestPyPI
 
@@ -112,6 +162,12 @@ poetry run pytest
 ```bash
 ./scripts/verify_build.sh
 ```
+
+## Operations Docs
+
+- [Runbook](docs/RUNBOOK.md)
+- [Requirements Traceability](docs/TRACEABILITY.md)
+- [Submission Checklist](docs/SUBMISSION_CHECKLIST.md)
 
 ## Contributing
 

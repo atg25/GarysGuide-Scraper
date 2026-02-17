@@ -14,3 +14,6 @@ build/
 .idea/
 .vscode/
 .DS_Store
+*.db
+*.sqlite3
+docker-data/
