@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: garys-events-scraper
 spec:
-  schedule: "0 * * * *"
+  schedule: "0 8 * * *"
   jobTemplate:
     spec:
       template:
