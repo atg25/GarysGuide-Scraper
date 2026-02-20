@@ -1,20 +1,30 @@
 # garys_nyc_events
 
-A polite, dependency-light Python library for extracting NYC tech events from GarysGuide.
+A Python package for scraping NYC tech events from [GarysGuide](https://www.garysguide.com/events), filtering them by keyword, and persisting them to a local SQLite database — all in a single command or Python call.
 
-This repository also includes a production-oriented data pipeline layer:
+---
 
-- Scrape events
-- Persist to SQLite (`runs`, `products`, `product_snapshots`)
-- Run repeatedly on cron
-- Containerize scheduler + persistence with Docker named volume
+## What This Tool Does
 
-## Features
+- **Scrapes** the GarysGuide NYC events page and extracts structured event data
+- **Filters** events by keyword (e.g. "AI", "Python", "startup")
+- **Persists** every run and its results to a local SQLite database with full history
+- **Formats** filtered events as clean JSON ready for downstream use (e.g. feeding an AI pipeline)
+- **Parses newsletter HTML** as a fallback data source when live scraping is not possible
+- **Retries automatically** on transient network errors with configurable backoff
+- **Runs as a one-shot container** — schedule it externally with cron or Kubernetes
 
-- Scrapes the GarysGuide events page
-- Polite throttling and a browser-like User-Agent
-- Extracts title, date, price (including "FREE"), and URL
-- Includes a newsletter HTML fallback parser
+Each event contains five fields:
+
+| Field    | Example                                   |
+| -------- | ----------------------------------------- |
+| `title`  | `"AI Demo Night at Cornell Tech"`         |
+| `date`   | `"Wed, Mar 5"`                            |
+| `price`  | `"FREE"` or `"$25"`                       |
+| `url`    | `"https://www.garysguide.com/events/..."` |
+| `source` | `"web"` or `"newsletter_fallback"`        |
+
+---
 
 ## Install
 
@@ -22,160 +32,221 @@ This repository also includes a production-oriented data pipeline layer:
 pip install garys_nyc_events
 ```
 
-## Pipeline Quick Start
+Or, for local development with [Poetry](https://python-poetry.org/):
 
-### One-shot run (scrape -> persist SQLite)
+```bash
+poetry install
+```
+
+---
+
+## Usage
+
+### One-liner: scrape all events right now
+
+```python
+from garys_nyc_events import scrape_default_garys_guide
+
+events = scrape_default_garys_guide(delay_seconds=1.5)
+# returns a list of dicts: [{"title": ..., "date": ..., "price": ..., "url": ..., "source": ...}, ...]
+```
+
+### Scrape with the class (more control)
+
+```python
+from garys_nyc_events import GarysGuideScraper
+
+scraper = GarysGuideScraper(
+    delay_seconds=1.0,    # wait between requests (be polite)
+    timeout_seconds=10,   # per-request timeout
+)
+events = scraper.get_events()
+```
+
+### Filter events by keyword
+
+```python
+from garys_nyc_events import filter_events_by_keyword
+
+ai_events = filter_events_by_keyword(events, "AI")
+# case-insensitive title match — returns only matching events
+```
+
+### Export filtered events as JSON
+
+```python
+from garys_nyc_events import get_events_ai_json
+
+json_str = get_events_ai_json(events, keyword="AI")
+print(json_str)
+# Pretty-printed JSON array of AI-related events
+```
+
+### Parse a newsletter HTML export (fallback)
+
+If you have a GarysGuide newsletter saved as HTML (e.g. from your email client), you can extract events from it without making any network requests:
+
+```python
+from garys_nyc_events import parse_newsletter_html
+
+with open("newsletter.html") as f:
+    raw_html = f.read()
+
+events = parse_newsletter_html(raw_html)
+# Returns event dicts with source="newsletter_fallback"
+# Automatically skips unsubscribe, social, and sponsor links
+```
+
+### Run the full pipeline (scrape + persist to SQLite)
 
 ```bash
 DB_PATH=./local_events.db poetry run garys-events-run-once
 ```
 
-### Verify DB
+This will:
+
+1. Scrape GarysGuide
+2. Apply any configured keyword filter and event limit
+3. Save the run metadata and all events to `local_events.db`
+4. Print a summary
+
+Verify the database afterward:
 
 ```bash
 DB_PATH=./local_events.db ./scripts/verify_db.sh
 ```
 
-### Scheduler in Docker (cron)
+---
+
+## Configuration
+
+All settings are controlled via environment variables. No config files needed.
+
+| Variable                | Default                 | What it does                                         |
+| ----------------------- | ----------------------- | ---------------------------------------------------- |
+| `DB_PATH`               | `/data/garys_events.db` | Path to the SQLite database file                     |
+| `SCRAPER_SEARCH_TERM`   | _(none)_                | Keyword to filter event titles (e.g. `AI`, `crypto`) |
+| `SCRAPER_LIMIT`         | `0`                     | Max events to keep per run (`0` = keep all)          |
+| `SCRAPER_STRATEGY`      | `web`                   | Scraper backend (`web` is the only current option)   |
+| `RETRY_ATTEMPTS`        | `3`                     | How many times to retry on a network failure         |
+| `RETRY_BACKOFF_SECONDS` | `5`                     | Seconds to wait between retries (linear backoff)     |
+| `API_TOKEN`             | _(none)_                | Reserved for a future API-based scraper strategy     |
+
+**Example — filter to AI events and cap at 20:**
 
 ```bash
-docker compose up --build -d
-docker compose logs -f scheduler
+SCRAPER_SEARCH_TERM=AI SCRAPER_LIMIT=20 DB_PATH=./events.db poetry run garys-events-run-once
 ```
 
-SQLite data persists in named volume `garys_events_data`.
+---
 
-## PyPI + Poetry Setup
+## Docker (One-Shot Container)
+
+The container runs once and exits. Schedule it externally — no cron daemon runs inside the image.
 
 ```bash
-poetry install
+# Build the image
+docker compose build scraper
+
+# Run one scrape pass
+docker compose run --rm scraper
 ```
 
-### Publish to PyPI
+**Override the DB path or filter at runtime:**
 
 ```bash
-poetry build
-poetry publish
+docker compose run --rm -e DB_PATH=/data/events.db -e SCRAPER_SEARCH_TERM=AI scraper
 ```
 
-## Releases (GitHub → PyPI)
+**Schedule with host cron (every day at 8 AM):**
 
-This repo includes a GitHub Actions workflow that publishes to PyPI when you push a version tag.
+```cron
+0 8 * * * cd /path/to/project && docker compose run --rm scraper
+```
 
-1. Add a GitHub repo secret named `PYPI_API_TOKEN` with your PyPI API token.
-2. Ensure `tool.poetry.version` in `pyproject.toml` is set.
-3. Create and push a matching tag:
+**Or use the included Kubernetes CronJob manifest:**
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+kubectl apply -f deploy/k8s-cronjob.yaml
 ```
 
-The workflow verifies the tag matches `v{version}`, runs tests, builds, checks the dist, then publishes.
+See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full deployment details.
 
-## Environment Variables (Config Contract)
+---
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `CRON_SCHEDULE` | `0 */6 * * *` | Cron schedule for recurring runs |
-| `TZ` | `UTC` | Timezone for cron runtime |
-| `SCRAPER_STRATEGY` | `web` | Scraper mode (currently `web`) |
-| `SCRAPER_SEARCH_TERM` | empty | Optional keyword filter on event title |
-| `SCRAPER_LIMIT` | `0` | Max events per run (`0` = no limit) |
-| `DB_PATH` | `/data/garys_events.db` | SQLite file path |
-| `RETRY_ATTEMPTS` | `3` | Retries for transient failures |
-| `RETRY_BACKOFF_SECONDS` | `5` | Linear backoff base seconds |
-| `API_TOKEN` | empty | Reserved for future API strategy |
+## Database Schema
 
-Run statuses written to `runs.status`:
+Events are stored in three tables:
 
-- `success`: no error
-- `partial`: some data + error
-- `failure`: no data + error
+- **`runs`** — one row per pipeline execution (timestamp, status, source, attempts)
+- **`products`** — deduplicated event records (title + URL = unique key)
+- **`product_snapshots`** — links each run to the events captured in that run
 
-### Publish to TestPyPI
+This lets you query event history across runs and detect when events appear or disappear.
 
-```bash
-poetry config repositories.testpypi https://test.pypi.org/legacy/
-poetry publish -r testpypi
-```
+---
 
-### Configure PyPI Token (Recommended)
+## Error Handling
 
-```bash
-poetry config pypi-token.pypi YOUR_TOKEN
-```
+The package raises typed domain exceptions — no silent failures:
 
-## Usage
+| Exception             | When it's raised                                      |
+| --------------------- | ----------------------------------------------------- |
+| `ScraperNetworkError` | HTTP error, connection refused, or bad status code    |
+| `ScraperTimeoutError` | Request timed out (subclass of `ScraperNetworkError`) |
+| `ScraperParseError`   | HTML structure could not be parsed into events        |
+| `StorageError`        | SQLite read/write failure                             |
 
-```python
-from garys_nyc_events import (
-	GarysGuideScraper,
-	get_events,
-	get_events_ai_json,
-	get_events_safe,
-	parse_newsletter_html,
-)
+Transient errors (`ScraperNetworkError`) are retried automatically. Non-transient errors propagate immediately.
 
-# Live scrape (polite delay included)
-events = get_events()
+---
 
-# Safe mode: returns [] instead of raising on network errors
-events = get_events_safe()
+## Architecture
 
-# JSON output of AI-related events (filtered by title)
-ai_events_json = get_events_ai_json()
-print(ai_events_json)
+The package is split into focused, single-purpose modules:
 
-# Parse raw HTML from a newsletter export
-raw_html = "<html>...your email html...</html>"
-newsletter_events = parse_newsletter_html(raw_html)
+| Module                 | Responsibility                                     |
+| ---------------------- | -------------------------------------------------- |
+| `scraper.py`           | HTTP fetching and HTML parsing of GarysGuide pages |
+| `runner_once.py`       | Pipeline orchestration (scrape → filter → persist) |
+| `storage.py`           | SQLite persistence (`SQLiteEventStore`)            |
+| `filters.py`           | Keyword filtering logic                            |
+| `formatters.py`        | JSON serialization for AI/downstream use           |
+| `newsletter_parser.py` | Parses newsletter HTML exports as a fallback       |
+| `http.py`              | `requests` adapter — the only file that uses HTTP  |
+| `protocols.py`         | `typing.Protocol` interfaces for all boundaries    |
+| `exceptions.py`        | Domain exception hierarchy                         |
+| `models.py`            | `Event` dataclass                                  |
+| `config.py`            | Loads configuration from environment variables     |
+| `scheduler.py`         | Retry/backoff helpers                              |
 
-# Class-based usage (custom delay)
-scraper = GarysGuideScraper(delay_seconds=2.0)
-events = scraper.get_events()
-```
-
-## How the Scraper Works
-
-- Selects anchors where href contains `/events/`
-- Walks up to the nearest `tr`, `li`, `div`, or `article` to capture context
-- If the container is a table row, it uses the first cell for date and the last cell for price
-- Extracts prices using `$` amounts or `FREE`
-- Normalizes relative URLs to full URLs
-
-## Notes
-
-- The public API returns a list of dictionaries with keys: `title`, `date`, `price`, `url`, `source`.
-- The scraper is polite by default; adjust `delay_seconds` if needed.
-- Live E2E test is disabled by default. Run with `RUN_E2E=1` to enable.
+---
 
 ## Development
 
 ```bash
+# Install dependencies
 poetry install
+
+# Run all tests
 poetry run pytest
-```
 
-### Verify Build Artifacts
-
-```bash
+# Verify the Docker image builds correctly
 ./scripts/verify_build.sh
 ```
 
-## Operations Docs
+Tests use injected HTTP doubles — no real network calls, no `requests-mock`. See [docs/TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md).
 
-- [Runbook](docs/RUNBOOK.md)
-- [Requirements Traceability](docs/TRACEABILITY.md)
-- [Submission Checklist](docs/SUBMISSION_CHECKLIST.md)
+---
 
-## Contributing
+## Docs
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+- [Runbook](docs/RUNBOOK.md) — deployment, scheduling, operations
+- [Testing Strategy](docs/TESTING_STRATEGY.md) — test boundaries and design
+- [Requirements Traceability](docs/TRACEABILITY.md) — requirement-to-code mapping
+- [Submission Checklist](docs/SUBMISSION_CHECKLIST.md) — project deliverable checklist
 
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md).
+---
 
 ## License
 

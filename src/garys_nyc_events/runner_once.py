@@ -8,9 +8,10 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
 from .config import PipelineConfig, load_config_from_env
-from .scraper import GarysGuideScraper, filter_events_by_keyword
+from .exceptions import ScraperNetworkError
+from .filters import filter_events_by_keyword
+from .protocols import EventScraper, EventStore
 from .scheduler import backoff_seconds, is_transient_error as scheduler_is_transient_error
-from .storage import SQLiteEventStore
 
 
 logger = logging.getLogger("garys_nyc_events.runner")
@@ -38,7 +39,9 @@ def is_transient_error(exc: Exception) -> bool:
 
 
 
-def _build_scraper(config: PipelineConfig) -> GarysGuideScraper:
+def _default_scraper(_config: PipelineConfig) -> EventScraper:
+    from .scraper import GarysGuideScraper
+
     return GarysGuideScraper()
 
 
@@ -47,7 +50,7 @@ def _run_scrape(config: PipelineConfig) -> List[Dict[str, str]]:
     if config.scraper_strategy != "web":
         raise ValueError(f"Unsupported SCRAPER_STRATEGY: {config.scraper_strategy}")
 
-    scraper = _build_scraper(config)
+    scraper = _default_scraper(config)
     events = scraper.get_events()
 
     if config.scraper_search_term:
@@ -63,11 +66,11 @@ def _run_scrape(config: PipelineConfig) -> List[Dict[str, str]]:
 def run_once(
     config: Optional[PipelineConfig] = None,
     scrape_func: Optional[Callable[[PipelineConfig], List[Dict[str, str]]]] = None,
-    store: Optional[SQLiteEventStore] = None,
+    store: Optional[EventStore] = None,
 ) -> RunSummary:
     cfg = config or load_config_from_env()
     scrape = scrape_func or _run_scrape
-    event_store = store or SQLiteEventStore(cfg.db_path)
+    event_store = store or _default_store(cfg)
     event_store.init_schema()
 
     attempts = 0
@@ -84,7 +87,7 @@ def run_once(
             events = list(exc.partial_events)
             error_message = str(exc)
             break
-        except Exception as exc:  # noqa: BLE001 - pipeline-level error handling
+        except ScraperNetworkError as exc:
             error_message = str(exc)
             if attempts >= max(1, cfg.retry_attempts) or not is_transient_error(exc):
                 break
@@ -132,6 +135,12 @@ def run_once(
     )
 
     return summary
+
+
+def _default_store(config: PipelineConfig) -> EventStore:
+    from .storage import SQLiteEventStore
+
+    return SQLiteEventStore(config.db_path)
 
 
 

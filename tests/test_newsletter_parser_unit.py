@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from garys_nyc_events.scraper import parse_newsletter_html
+from garys_nyc_events.newsletter_parser import parse_newsletter_html
 
 
 def test_parse_newsletter_html_extracts_events():

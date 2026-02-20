@@ -1,10 +1,10 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cron sqlite3 \
+    && apt-get install -y --no-install-recommends sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,11 +14,9 @@ COPY src /app/src
 COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir . \
-    && chmod +x /app/scripts/start-cron.sh /app/scripts/verify_db.sh
+    && chmod +x /app/scripts/run_once_entrypoint.sh /app/scripts/verify_db.sh
 
-ENV CRON_SCHEDULE="0 */6 * * *" \
-    TZ="UTC" \
-    SCRAPER_STRATEGY="web" \
+ENV SCRAPER_STRATEGY="web" \
     SCRAPER_SEARCH_TERM="" \
     SCRAPER_LIMIT="0" \
     DB_PATH="/data/garys_events.db" \
@@ -28,4 +26,4 @@ ENV CRON_SCHEDULE="0 */6 * * *" \
 
 VOLUME ["/data"]
 
-CMD ["/app/scripts/start-cron.sh"]
+CMD ["/app/scripts/run_once_entrypoint.sh"]

@@ -1,0 +1,24 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: garys-events-scraper
+spec:
+  schedule: "0 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: scraper
+              image: garys-nyc-events:latest
+              env:
+                - name: DB_PATH
+                  value: /data/garys_events.db
+              volumeMounts:
+                - name: events-data
+                  mountPath: /data
+          volumes:
+            - name: events-data
+              persistentVolumeClaim:
+                claimName: events-data-pvc
+          restartPolicy: OnFailure

@@ -8,48 +8,56 @@
 poetry install
 ```
 
-2. Execute one run and persist to SQLite:
+1. Execute one run and persist to SQLite:
 
 ```bash
 DB_PATH=./local_events.db poetry run garys-events-run-once
 ```
 
-3. Verify DB contents:
+1. Verify DB contents:
 
 ```bash
 DB_PATH=./local_events.db ./scripts/verify_db.sh
 ```
 
-## Docker Scheduled Pipeline Run
+## Docker One-Shot Run
 
-1. Build and start scheduler container:
+1. Build image:
 
 ```bash
-docker compose up --build -d
+docker compose build scraper
 ```
 
-2. Follow logs (run summaries every execution):
+1. Run a single scrape and exit:
 
 ```bash
-docker compose logs -f scheduler
+docker compose run --rm scraper
 ```
 
-3. Verify persistent SQLite state inside container:
+1. Verify persistent SQLite state:
 
 ```bash
-docker compose exec scheduler /app/scripts/verify_db.sh /data/garys_events.db
+docker compose run --rm scraper /app/scripts/verify_db.sh /data/garys_events.db
 ```
 
-4. Stop stack (volume retained):
+## Scheduling with Host Cron
+
+Containers are intentionally one-shot. Schedule them externally on the host:
 
 ```bash
-docker compose down
+*/30 * * * * cd /path/to/PyPack_GarysGuide && docker compose run --rm scraper
 ```
 
-5. Remove stack + data volume explicitly:
+This keeps the container single-process and lets cron remain the scheduler.
+
+## Scheduling with Kubernetes CronJob
+
+Use [deploy/k8s-cronjob.yaml](../deploy/k8s-cronjob.yaml) as the reference job definition.
+
+Apply:
 
 ```bash
-docker compose down -v
+kubectl apply -f deploy/k8s-cronjob.yaml
 ```
 
 ## DB Verification Commands
@@ -60,13 +68,8 @@ sqlite3 ./local_events.db < scripts/sql/verify_latest_runs.sql
 sqlite3 ./local_events.db < scripts/sql/verify_snapshot_counts.sql
 ```
 
-## Troubleshooting
+## Why No Cron in Container
 
-- If cron fails to start, validate schedule manually:
-
-```bash
-poetry run garys-events-validate-cron --schedule "0 */6 * * *"
-```
-
-- If no rows are written, inspect run logs for `status=failure` and error details.
-- Ensure `DB_PATH` points to a writable file path.
+- One process per container keeps startup, shutdown, and signal handling predictable.
+- Logs stay in container stdout/stderr for normal Docker and orchestrator aggregation.
+- Scheduling belongs to host cron, Kubernetes CronJob, or a workflow orchestrator.

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-import json
 import re
 import time
-from dataclasses import dataclass, asdict
-from typing import Iterable, List, Dict, Optional
+from dataclasses import asdict
+from typing import Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup, Tag
+
+from .exceptions import ScraperNetworkError
+from .http import RequestsHttpClient
+from .models import Event
+from .protocols import HttpClient
 
 
 DEFAULT_USER_AGENT = (
@@ -26,18 +29,6 @@ DATE_TOKENS = [
 ]
 
 
-@dataclass(frozen=True)
-class Event:
-    title: str
-    date: str
-    price: str
-    url: str
-    source: str
-
-    def to_dict(self) -> Dict[str, str]:
-        return asdict(self)
-
-
 class GarysGuideScraper:
     BASE_URL = "https://www.garysguide.com/events"
 
@@ -46,10 +37,12 @@ class GarysGuideScraper:
         delay_seconds: float = 1.5,
         user_agent: str = DEFAULT_USER_AGENT,
         timeout_seconds: int = 10,
+        http_client: Optional[HttpClient] = None,
     ) -> None:
         self.delay_seconds = delay_seconds
         self.user_agent = user_agent
         self.timeout_seconds = timeout_seconds
+        self._http = http_client or RequestsHttpClient()
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -59,9 +52,12 @@ class GarysGuideScraper:
 
     def _fetch_html(self, url: str) -> str:
         time.sleep(self.delay_seconds)
-        response = requests.get(url, headers=self._headers(), timeout=self.timeout_seconds)
-        response.raise_for_status()
-        return response.text
+        try:
+            response = self._http.get(url, headers=self._headers(), timeout=self.timeout_seconds)
+            response.raise_for_status()
+            return response.text
+        except ScraperNetworkError:
+            raise
 
     def _clean(self, value: Optional[str]) -> str:
         return value.strip() if value else ""
@@ -87,34 +83,51 @@ class GarysGuideScraper:
             return normalized
         return ""
 
-    def _extract_event_from_element(self, element: Tag) -> Optional[Event]:
+    def _extract_anchor(self, element: Tag) -> Optional[Tuple[str, str]]:
         link = element.find("a", href=True)
         if not link:
             return None
 
         title = self._clean(link.get_text())
-        url = self._clean(link.get("href"))
-        if not title or not url:
+        href = self._clean(link.get("href"))
+        if not title or not href:
             return None
+        return title, href
 
-        url = self._normalize_url(url)
+    def _extract_date_from_table_row(self, cells: List[Tag]) -> str:
+        if not cells:
+            return ""
+        return self._extract_date(self._clean(cells[0].get_text(" ")))
 
-        text_blob = self._clean(element.get_text(" "))
+    def _extract_price_from_table_row(self, cells: List[Tag]) -> str:
+        if len(cells) <= 1:
+            return ""
+        return self._extract_price(self._clean(cells[-1].get_text(" ")))
+
+    def _extract_date_and_price_from_element(self, element: Tag) -> Tuple[str, str]:
         date = ""
         price = ""
 
         if element.name == "tr":
             cells = element.find_all("td")
-            if cells:
-                date = self._extract_date(self._clean(cells[0].get_text(" ")))
-                if len(cells) > 1:
-                    price = self._extract_price(self._clean(cells[-1].get_text(" ")))
+            date = self._extract_date_from_table_row(cells)
+            price = self._extract_price_from_table_row(cells)
 
+        text_blob = self._clean(element.get_text(" "))
         if not date:
             date = self._extract_date(text_blob)
         if not price:
             price = self._extract_price(text_blob)
+        return date, price
 
+    def _extract_event_from_element(self, element: Tag) -> Optional[Event]:
+        anchor = self._extract_anchor(element)
+        if anchor is None:
+            return None
+
+        title, href = anchor
+        url = self._normalize_url(href)
+        date, price = self._extract_date_and_price_from_element(element)
         return Event(title=title, date=date, price=price, url=url, source="garysguide_web")
 
     def _candidate_elements(self, soup: BeautifulSoup) -> Iterable[Tag]:
@@ -134,84 +147,17 @@ class GarysGuideScraper:
             if event:
                 events.append(event)
 
-        # Deduplicate by URL and title
         unique = {}
         for event in events:
             key = (event.title, event.url)
             unique[key] = event
 
-        return [event.to_dict() for event in unique.values()]
+        return [asdict(event) for event in unique.values()]
 
     def get_events(self) -> List[Dict[str, str]]:
         html = self._fetch_html(self.BASE_URL)
         return self.parse_events(html)
 
-    def get_events_safe(self) -> List[Dict[str, str]]:
-        try:
-            return self.get_events()
-        except requests.RequestException:
-            return []
 
-
-def get_events(delay_seconds: float = 1.5) -> List[Dict[str, str]]:
+def scrape_default_garys_guide(delay_seconds: float = 1.5) -> List[Dict[str, str]]:
     return GarysGuideScraper(delay_seconds=delay_seconds).get_events()
-
-
-def get_events_safe(delay_seconds: float = 1.5) -> List[Dict[str, str]]:
-    return GarysGuideScraper(delay_seconds=delay_seconds).get_events_safe()
-
-
-def filter_events_by_keyword(
-    events: List[Dict[str, str]],
-    keyword: str,
-) -> List[Dict[str, str]]:
-    needle = keyword.lower().strip()
-    if not needle:
-        return events
-    return [event for event in events if needle in event.get("title", "").lower()]
-
-
-def get_events_ai_json(delay_seconds: float = 1.5) -> str:
-    events = get_events_safe(delay_seconds=delay_seconds)
-    ai_events = filter_events_by_keyword(events, "AI")
-    return json.dumps(ai_events, ensure_ascii=False, indent=2)
-
-
-def parse_newsletter_html(raw_html: str) -> List[Dict[str, str]]:
-    soup = BeautifulSoup(raw_html, "html.parser")
-    events: List[Event] = []
-
-    ignore_tokens = [
-        "unsubscribe",
-        "view in browser",
-        "privacy",
-        "sponsor",
-        "advertise",
-        "mailto:",
-        "facebook.com",
-        "twitter.com",
-        "linkedin.com",
-    ]
-
-    for link in soup.find_all("a", href=True):
-        title = link.get_text(strip=True)
-        url = link.get("href", "").strip()
-        if not title or not url:
-            continue
-        if any(token in url.lower() for token in ignore_tokens):
-            continue
-        if any(token in title.lower() for token in ignore_tokens):
-            continue
-
-        events.append(
-            Event(
-                title=title,
-                date="",
-                price="",
-                url=url,
-                source="newsletter_fallback",
-            )
-        )
-
-    unique = {(e.title, e.url): e for e in events}
-    return [event.to_dict() for event in unique.values()]

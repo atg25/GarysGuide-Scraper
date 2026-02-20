@@ -1,12 +1,10 @@
 services:
-  scheduler:
+  scraper:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: garys-events-scheduler
+    container_name: garys-events-scraper
     environment:
-      CRON_SCHEDULE: ${CRON_SCHEDULE:-0 */6 * * *}
-      TZ: ${TZ:-UTC}
       SCRAPER_STRATEGY: ${SCRAPER_STRATEGY:-web}
       SCRAPER_SEARCH_TERM: ${SCRAPER_SEARCH_TERM:-}
       SCRAPER_LIMIT: ${SCRAPER_LIMIT:-0}
@@ -16,7 +14,6 @@ services:
       API_TOKEN: ${API_TOKEN:-}
     volumes:
       - garys_events_data:/data
-    restart: unless-stopped
 
 volumes:
   garys_events_data:

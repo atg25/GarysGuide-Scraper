@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 
 from croniter import croniter
-import requests
 
 from .config import load_config_from_env
+from .exceptions import ScraperNetworkError
 
 
 
@@ -15,13 +15,7 @@ def validate_cron_schedule(schedule: str) -> None:
 
 
 def is_transient_error(exc: Exception) -> bool:
-    if isinstance(exc, (requests.Timeout, requests.ConnectionError)):
-        return True
-    if isinstance(exc, requests.HTTPError) and exc.response is not None:
-        return exc.response.status_code in {429, 500, 502, 503, 504}
-    if isinstance(exc, requests.RequestException):
-        return True
-    return False
+    return isinstance(exc, ScraperNetworkError)
 
 
 def backoff_seconds(base_seconds: float, attempt: int) -> float:

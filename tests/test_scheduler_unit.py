@@ -1,7 +1,7 @@
 import pytest
-import requests
 
 from garys_nyc_events.config import PipelineConfig
+from garys_nyc_events.exceptions import ScraperNetworkError
 from garys_nyc_events.runner_once import PartialScrapeError, is_transient_error, run_once
 from garys_nyc_events.scheduler import validate_cron_schedule
 from garys_nyc_events.storage import SQLiteEventStore
@@ -25,7 +25,7 @@ def test_retry_on_transient_error(tmp_path, monkeypatch):
     def fake_scrape(_config):
         calls["count"] += 1
         if calls["count"] == 1:
-            raise requests.Timeout("temporary timeout")
+            raise ScraperNetworkError("temporary timeout")
         return [{"title": "AI Event", "url": "https://www.garysguide.com/events/1", "price": "FREE", "date": "Wed"}]
 
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
@@ -51,19 +51,18 @@ def test_no_retry_on_non_transient_error(tmp_path):
         calls["count"] += 1
         raise ValueError("bad config")
 
-    summary = run_once(
-        config=PipelineConfig(db_path=str(db_path), retry_attempts=5, retry_backoff_seconds=0.01),
-        scrape_func=fake_scrape,
-        store=store,
-    )
+    with pytest.raises(ValueError):
+        run_once(
+            config=PipelineConfig(db_path=str(db_path), retry_attempts=5, retry_backoff_seconds=0.01),
+            scrape_func=fake_scrape,
+            store=store,
+        )
 
     assert calls["count"] == 1
-    assert summary.status == "failure"
-    assert "bad config" in summary.error
 
 
 def test_transient_error_classifier():
-    assert is_transient_error(requests.Timeout("timeout")) is True
+    assert is_transient_error(ScraperNetworkError("timeout")) is True
     assert is_transient_error(ValueError("bad")) is False
 
 

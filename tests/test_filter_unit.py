@@ -1,4 +1,4 @@
-from garys_nyc_events import filter_events_by_keyword
+from garys_nyc_events.filters import filter_events_by_keyword
 
 
 def test_filter_events_by_keyword_matches_title():
