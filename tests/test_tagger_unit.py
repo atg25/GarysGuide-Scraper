@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 from garys_nyc_events.config import PipelineConfig
 from garys_nyc_events.storage import SQLiteEventStore
@@ -102,6 +103,7 @@ def test_tags_persisted_and_retrieved_from_db(tmp_path):
                 "tags": ["ai", "free"],
             }
         ],
+        today=date(2026, 2, 26),
     )
     events = store.fetch_events()
     assert events[0]["tags"] == ["ai", "free"]
@@ -128,6 +130,7 @@ def test_tags_empty_list_stored_as_empty_json_array(tmp_path):
                 "tags": [],
             }
         ],
+        today=date(2026, 2, 26),
     )
     events = store.fetch_events()
     assert events[0]["tags"] == []
