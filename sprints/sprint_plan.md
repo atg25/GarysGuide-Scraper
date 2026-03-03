@@ -64,3 +64,99 @@ This project follows a Test-Driven Development (TDD) approach. Each sprint inclu
   - [x] Verify build artifacts (`sdist` and `wheel`).
 - **Tests:**
   - _Integration:_ Install built wheel in a fresh virtualenv and run a basic import test.
+
+---
+
+## Upcoming Sprints (TDD — Tests Written First)
+
+### Sprint 12: Event Completeness — Location, Description, Time & AI-Week Filter
+
+**Goal:** Add `time`, `location`, and `description` to `Event`; filter to AI events in the
+upcoming 7-day window. Addresses **Goal 1**.
+
+- **Tasks:**
+  - [ ] Extend `Event` dataclass with `time`, `location`, `description` fields (defaults `""`).
+  - [ ] Add `_extract_time`, `_extract_location`, `_extract_description` to `GarysGuideScraper`.
+  - [ ] Add `filter_events_upcoming_week(events, today)` to `filters.py`.
+  - [ ] Add `filter_ai_events(events)` with `AI_KEYWORDS` frozenset to `filters.py`.
+  - [ ] Wire both filters into `runner_once._run_scrape`.
+  - [ ] Add `time`, `location`, `description` columns to `product_snapshots` schema.
+  - [ ] Add `python-dateutil` dependency.
+- **Tests (write first):**
+  - _Unit (×13):_ Time/location/description extraction; AI keyword filter positive & negative; week
+    window filter boundary cases (yesterday excluded, tomorrow included, 8 days excluded, empty
+    date excluded).
+  - _Integration (×2):_ Fixture HTML → new fields present; stub scraper → AI+week filter applied.
+  - _E2E (×3):_ Live scrape → required fields present; all events within next 7 days; no non-AI
+    events leak through.
+- **Detail:** `sprints/planned/sprint_12_event_completeness.md`
+
+---
+
+### Sprint 13: DB Deduplication — Zero Repeating Events
+
+**Goal:** Guarantee the same event is stored exactly once regardless of how many times the scraper
+runs. Addresses **Goal 2**.
+
+- **Tasks:**
+  - [ ] Normalise canonical keys (strip URL query params / fragments).
+  - [ ] Change `product_snapshots` constraint from `UNIQUE(run_id, product_id)` → `UNIQUE(product_id)`.
+  - [ ] Use upsert-or-skip snapshot logic (only update when price/date/location changes).
+  - [ ] Add `fetch_events(limit, ai_only)` read-path method to `SQLiteEventStore`.
+  - [ ] Add `fetch_events` to `EventStore` protocol.
+  - [ ] Schema migration guard for existing databases.
+- **Tests (write first):**
+  - _Unit (×10):_ Same event twice → 1 product row, 1 snapshot row; URL normalisation; 10 runs
+    same 5 events → 5 rows; price update overwrites snapshot; `fetch_events` uniqueness guarantee.
+  - _Integration (×2):_ Idempotent schema reinit; migration preserves existing data.
+  - _E2E (×3):_ Live two-run → no duplicate products; `fetch_events` unique URLs; same-URL
+    different-title → 1 product keyed on URL.
+- **Detail:** `sprints/planned/sprint_13_db_deduplication.md`
+
+---
+
+### Sprint 14: Gemini AI Tagging — Automated Event Tags
+
+**Goal:** Call the Google Gemini API after each scrape to attach semantic tags to every event.
+Addresses **Goal 3**. Key lives in `.env` as `GEMINI_API_KEY` (also accepts legacy `GEMNINI_API_KEY`).
+
+- **Tasks:**
+  - [ ] Add `tags: List[str]` field to `Event` model (default `[]`).
+  - [ ] Create `src/garys_nyc_events/tagger.py` with `GeminiTagger` class.
+  - [ ] Implement `_call_gemini` via existing `HttpClient` protocol (no Google SDK dep required).
+  - [ ] Add `gemini_api_key` and `tagging_enabled` to `PipelineConfig`.
+  - [ ] Wire tagger into `runner_once._run_scrape` (optional, fail-safe).
+  - [ ] Add `tags TEXT` column to `product_snapshots`; deserialise in `fetch_events`.
+  - [ ] Deprecation warning when `GEMNINI_API_KEY` (typo) is used; migrate `.env` to `GEMINI_API_KEY`.
+- **Tests (write first):**
+  - _Unit (×9):_ No key → `[]`; network failure → `[]`; malformed JSON → `[]`; valid response →
+    list; truncation; fallback env var; `TAGGING_ENABLED=false` bypasses calls.
+  - _Integration (×3):_ Tags persisted & retrieved; empty tags stored as `[]`; schema migration safe.
+  - _E2E (×3):_ Live key → non-empty tags; tags are lowercase strings; pipeline runs without key.
+- **Detail:** `sprints/planned/sprint_14_gemini_ai_tagging.md`
+
+---
+
+### Sprint 15: Public REST API — NYC AI Events as a Service
+
+**Goal:** Expose the database as a FastAPI REST API consumable by any HTTP client. Addresses
+**Goal 4**.
+
+- **Tasks:**
+  - [ ] Create `src/garys_nyc_events/api/` package (app factory, auth, routers, schemas).
+  - [ ] `GET /health` — public; `GET /events` — bearer auth; `GET /events/{id}` — bearer auth.
+  - [ ] `GET /runs` — list recent runs; `POST /runs/trigger` — manual scrape trigger.
+  - [ ] Pydantic `EventOut` / `EventListOut` / `RunOut` response schemas.
+  - [ ] Bearer token auth via `API_TOKEN` env var; open mode (read-only) when unset.
+  - [ ] Add FastAPI/uvicorn/httpx/pydantic≥2 dependencies.
+  - [ ] API server entrypoint in `Dockerfile`; port `8000` in `docker-compose.yml`.
+  - [ ] OpenAPI/Swagger UI at `/docs`.
+- **Tests (write first):**
+  - _Unit (×12):_ Health no-auth; missing/invalid token → 401/403; valid token → event list;
+    `ai_only`/date-range/tag filters; `GET /events/{id}` 404; trigger 503 (no token configured);
+    trigger 202; runs list.
+  - _Integration (×4):_ Full pipeline → events visible via API; trigger persists events; dedup
+    across two triggers; tags in response.
+  - _E2E (×5):_ Live health; live AI events; trigger then fetch; invalid token blocked; OpenAPI
+    JSON valid.
+- **Detail:** `sprints/planned/sprint_15_rest_api.md`

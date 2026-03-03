@@ -11,13 +11,13 @@ poetry install
 1. Execute one run and persist to SQLite:
 
 ```bash
-DB_PATH=./local_events.db poetry run garys-events-run-once
+DB_PATH=./garys_events.db poetry run garys-events-run-once
 ```
 
 1. Verify DB contents:
 
 ```bash
-DB_PATH=./local_events.db ./scripts/verify_db.sh
+DB_PATH=./garys_events.db ./scripts/verify_db.sh
 ```
 
 ## Docker One-Shot Run
@@ -63,9 +63,9 @@ kubectl apply -f deploy/k8s-cronjob.yaml
 ## DB Verification Commands
 
 ```bash
-sqlite3 ./local_events.db < scripts/sql/verify_schema.sql
-sqlite3 ./local_events.db < scripts/sql/verify_latest_runs.sql
-sqlite3 ./local_events.db < scripts/sql/verify_snapshot_counts.sql
+sqlite3 ./garys_events.db < scripts/sql/verify_schema.sql
+sqlite3 ./garys_events.db < scripts/sql/verify_latest_runs.sql
+sqlite3 ./garys_events.db < scripts/sql/verify_snapshot_counts.sql
 ```
 
 ## Why No Cron in Container

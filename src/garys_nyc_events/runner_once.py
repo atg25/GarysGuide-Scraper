@@ -9,9 +9,10 @@ from typing import Callable, Dict, List, Optional
 
 from .config import PipelineConfig, load_config_from_env
 from .exceptions import ScraperNetworkError
-from .filters import filter_events_by_keyword
+from .filters import filter_ai_events, filter_events_by_keyword, filter_events_upcoming_week
 from .protocols import EventScraper, EventStore
 from .scheduler import backoff_seconds, is_transient_error as scheduler_is_transient_error
+from .tagger import GeminiTagger
 
 
 logger = logging.getLogger("garys_nyc_events.runner")
@@ -56,8 +57,21 @@ def _run_scrape(config: PipelineConfig) -> List[Dict[str, str]]:
     if config.scraper_search_term:
         events = filter_events_by_keyword(events, config.scraper_search_term)
 
+    if config.scraper_search_term.strip().lower() == "ai":
+        events = filter_ai_events(events)
+        events = filter_events_upcoming_week(events)
+
     if config.scraper_limit > 0:
         events = events[: config.scraper_limit]
+
+    if config.tagging_enabled:
+        tagger = GeminiTagger(api_key=config.gemini_api_key)
+        if tagger.is_available():
+            events = tagger.tag_events(events)
+        else:
+            events = [{**event, "tags": []} for event in events]
+    else:
+        events = [{**event, "tags": []} for event in events]
 
     return events
 

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
+from urllib.parse import urlsplit, urlunsplit
+
+from .filters import filter_ai_events, filter_events_upcoming_week
 
 
 SCHEMA_SQL = """
@@ -25,35 +29,41 @@ CREATE TABLE IF NOT EXISTS runs (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS products (
+CREATE TABLE IF NOT EXISTS "all events" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     canonical_key TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     url TEXT,
+    description TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
+    price TEXT,
+    event_date TEXT,
+    event_time TEXT,
+    event_location TEXT,
+    date_found TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS product_snapshots (
+CREATE TABLE IF NOT EXISTS weekly_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL,
-    product_id INTEGER NOT NULL,
-    votes INTEGER,
+    all_event_id INTEGER NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    url TEXT,
     description TEXT,
-    topics TEXT,
+    tags TEXT,
     price TEXT,
     event_date TEXT,
-    observed_at TEXT NOT NULL,
+    event_time TEXT,
+    event_location TEXT,
+    date_found TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE,
-    FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
-    UNIQUE(run_id, product_id)
+    FOREIGN KEY(all_event_id) REFERENCES "all events"(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_fetched_at ON runs(fetched_at);
-CREATE INDEX IF NOT EXISTS idx_products_canonical_key ON products(canonical_key);
-CREATE INDEX IF NOT EXISTS idx_snapshots_run_id ON product_snapshots(run_id);
-CREATE INDEX IF NOT EXISTS idx_snapshots_product_id ON product_snapshots(product_id);
+CREATE INDEX IF NOT EXISTS idx_all_events_canonical_key ON "all events"(canonical_key);
+CREATE INDEX IF NOT EXISTS idx_weekly_events_date ON weekly_events(event_date);
 """
 
 
@@ -79,7 +89,7 @@ class SQLiteEventStore:
             connection.execute("PRAGMA foreign_keys = ON;")
             yield connection
             connection.commit()
-        except Exception:
+        except BaseException:
             connection.rollback()
             raise
         finally:
@@ -89,34 +99,154 @@ class SQLiteEventStore:
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
 
+    def _normalize_url(self, url: str) -> str:
+        cleaned = (url or "").strip()
+        if not cleaned:
+            return ""
+        parsed = urlsplit(cleaned)
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
     def _canonical_key(self, event: Dict[str, str]) -> str:
-        url = (event.get("url") or "").strip()
+        url = self._normalize_url(event.get("url") or "")
         title = (event.get("title") or "").strip().lower()
         if url:
             return f"url:{url}"
         return f"name:{title}"
 
-    def _upsert_product(self, conn: sqlite3.Connection, event: Dict[str, str]) -> int:
+    def _upsert_all_event(
+        self,
+        conn: sqlite3.Connection,
+        event: Dict[str, str],
+        *,
+        date_found: str,
+    ) -> int:
         key = self._canonical_key(event)
         name = (event.get("title") or "").strip() or "Untitled"
-        url = (event.get("url") or "").strip() or None
+        url = self._normalize_url(event.get("url") or "") or None
 
         conn.execute(
             """
-            INSERT INTO products (canonical_key, name, url)
-            VALUES (?, ?, ?)
+            INSERT INTO "all events" (
+                canonical_key,
+                name,
+                url,
+                description,
+                tags,
+                price,
+                event_date,
+                event_time,
+                event_location,
+                date_found
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(canonical_key) DO UPDATE SET
                 name=excluded.name,
-                url=COALESCE(excluded.url, products.url),
+                url=COALESCE(excluded.url, "all events".url),
+                description=excluded.description,
+                tags=excluded.tags,
+                price=excluded.price,
+                event_date=excluded.event_date,
+                event_time=excluded.event_time,
+                event_location=excluded.event_location,
+                date_found=excluded.date_found,
                 updated_at=CURRENT_TIMESTAMP
             """,
-            (key, name, url),
+            (
+                key,
+                name,
+                url,
+                event.get("description", ""),
+                json.dumps(event.get("tags", []), ensure_ascii=False),
+                event.get("price", ""),
+                event.get("date", ""),
+                event.get("time", ""),
+                event.get("location", ""),
+                date_found,
+            ),
         )
 
-        row = conn.execute("SELECT id FROM products WHERE canonical_key = ?", (key,)).fetchone()
+        row = conn.execute('SELECT id FROM "all events" WHERE canonical_key = ?', (key,)).fetchone()
         if row is None:
             raise RuntimeError("Failed to resolve product id after upsert")
         return int(row["id"])
+
+    def _refresh_weekly_events(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute(
+            '''
+            SELECT
+                id,
+                name,
+                url,
+                description,
+                tags,
+                price,
+                event_date,
+                event_time,
+                event_location,
+                date_found
+            FROM "all events"
+            WHERE date(date_found) >= date('2026-02-27')
+            '''
+        ).fetchall()
+
+        all_events = [
+            {
+                "id": row["id"],
+                "title": row["name"] or "",
+                "url": row["url"] or "",
+                "description": row["description"] or "",
+                "tags": json.loads(row["tags"] or "[]"),
+                "price": row["price"] or "",
+                "date": row["event_date"] or "",
+                "time": row["event_time"] or "",
+                "location": row["event_location"] or "",
+                "date_found": row["date_found"] or "",
+            }
+            for row in rows
+        ]
+
+        weekly = filter_events_upcoming_week(all_events, today=date.today())
+
+        conn.execute("DELETE FROM weekly_events")
+        for event in weekly:
+            conn.execute(
+                """
+                INSERT INTO weekly_events (
+                    all_event_id,
+                    name,
+                    url,
+                    description,
+                    tags,
+                    price,
+                    event_date,
+                    event_time,
+                    event_location,
+                    date_found
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(all_event_id) DO UPDATE SET
+                    name=excluded.name,
+                    url=excluded.url,
+                    description=excluded.description,
+                    tags=excluded.tags,
+                    price=excluded.price,
+                    event_date=excluded.event_date,
+                    event_time=excluded.event_time,
+                    event_location=excluded.event_location,
+                    date_found=excluded.date_found
+                """,
+                (
+                    event.get("id"),
+                    event.get("title", ""),
+                    event.get("url", ""),
+                    event.get("description", ""),
+                    json.dumps(event.get("tags", []), ensure_ascii=False),
+                    event.get("price", ""),
+                    event.get("date", ""),
+                    event.get("time", ""),
+                    event.get("location", ""),
+                    event.get("date_found", datetime.now(timezone.utc).isoformat()),
+                ),
+            )
 
     def persist_run(
         self,
@@ -162,31 +292,9 @@ class SQLiteEventStore:
 
             observed_at = datetime.now(timezone.utc).isoformat()
             for event in event_list:
-                product_id = self._upsert_product(conn, event)
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO product_snapshots (
-                        run_id,
-                        product_id,
-                        votes,
-                        description,
-                        topics,
-                        price,
-                        event_date,
-                        observed_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        run_id,
-                        product_id,
-                        None,
-                        event.get("title", ""),
-                        search_term,
-                        event.get("price", ""),
-                        event.get("date", ""),
-                        observed_at,
-                    ),
-                )
+                self._upsert_all_event(conn, event, date_found=observed_at)
+
+            self._refresh_weekly_events(conn)
 
         return RunRecord(
             run_id=run_id,
@@ -201,6 +309,58 @@ class SQLiteEventStore:
             return conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
 
     def count_rows(self, table_name: str) -> int:
+        aliases = {
+            "all events": '"all events"',
+            "all_events": '"all events"',
+            "weekly_events": "weekly_events",
+        }
+        resolved = aliases.get(table_name, table_name)
         with self._connect() as conn:
-            row = conn.execute(f"SELECT COUNT(*) AS count FROM {table_name}").fetchone()
+            row = conn.execute(f"SELECT COUNT(*) AS count FROM {resolved}").fetchone()
             return int(row["count"]) if row else 0
+
+    def fetch_events(self, *, limit: int = 0, ai_only: bool = False) -> List[Dict[str, str]]:
+        query = """
+            SELECT
+                w.all_event_id AS id,
+                w.name AS title,
+                w.url AS url,
+                w.description AS description,
+                w.tags AS tags,
+                w.price AS price,
+                w.event_date AS date,
+                w.event_time AS time,
+                w.event_location AS location,
+                '' AS topics,
+                w.date_found AS date_found
+            FROM weekly_events w
+            ORDER BY w.event_date ASC, w.id ASC
+        """
+        params: List[object] = []
+        if limit > 0:
+            query += " LIMIT ?"
+            params.append(limit)
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        events = [
+            {
+                "id": row["id"],
+                "title": row["title"] or "",
+                "url": row["url"] or "",
+                "description": row["description"] or "",
+                "tags": json.loads(row["tags"] or "[]"),
+                "price": row["price"] or "",
+                "date": row["date"] or "",
+                "time": row["time"] or "",
+                "location": row["location"] or "",
+                "topics": row["topics"] or "",
+                "date_found": row["date_found"] or "",
+            }
+            for row in rows
+        ]
+
+        if ai_only:
+            events = filter_ai_events(events)
+        return events

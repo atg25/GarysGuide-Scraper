@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: garys-events-scraper
+    env_file:
+      - .env
     environment:
       SCRAPER_STRATEGY: ${SCRAPER_STRATEGY:-web}
       SCRAPER_SEARCH_TERM: ${SCRAPER_SEARCH_TERM:-}
@@ -12,8 +14,34 @@ services:
       RETRY_ATTEMPTS: ${RETRY_ATTEMPTS:-3}
       RETRY_BACKOFF_SECONDS: ${RETRY_BACKOFF_SECONDS:-5}
       API_TOKEN: ${API_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TAGGING_ENABLED: ${TAGGING_ENABLED:-true}
     volumes:
       - garys_events_data:/data
+    command: ["/app/scripts/run_once_entrypoint.sh"]
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: garys-events-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SCRAPER_STRATEGY: ${SCRAPER_STRATEGY:-web}
+      SCRAPER_SEARCH_TERM: ${SCRAPER_SEARCH_TERM:-}
+      SCRAPER_LIMIT: ${SCRAPER_LIMIT:-0}
+      DB_PATH: ${DB_PATH:-/data/garys_events.db}
+      RETRY_ATTEMPTS: ${RETRY_ATTEMPTS:-3}
+      RETRY_BACKOFF_SECONDS: ${RETRY_BACKOFF_SECONDS:-5}
+      API_TOKEN: ${API_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TAGGING_ENABLED: ${TAGGING_ENABLED:-true}
+      CRON_SCHEDULE: ${CRON_SCHEDULE:-0 8 * * *}
+    volumes:
+      - garys_events_data:/data
+    command: ["/app/scripts/start_cron.sh"]
 
 volumes:
   garys_events_data:

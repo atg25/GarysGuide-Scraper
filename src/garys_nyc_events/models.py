@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
 
 
 @dataclass(frozen=True)
@@ -10,3 +11,7 @@ class Event:
     price: str
     url: str
     source: str
+    time: str = ""
+    location: str = ""
+    description: str = ""
+    tags: List[str] = field(default_factory=list)

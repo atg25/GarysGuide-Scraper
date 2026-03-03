@@ -66,6 +66,24 @@ def test_transient_error_classifier():
     assert is_transient_error(ValueError("bad")) is False
 
 
+def test_run_once_records_failure_on_unrecoverable_network_error(tmp_path):
+    db_path = tmp_path / "events.db"
+    store = SQLiteEventStore(str(db_path))
+
+    def fake_scrape(_config):
+        raise ScraperNetworkError("outage")
+
+    summary = run_once(
+        config=PipelineConfig(db_path=str(db_path), retry_attempts=2, retry_backoff_seconds=0.01),
+        scrape_func=fake_scrape,
+        store=store,
+    )
+
+    assert summary.status == "failure"
+    assert summary.fetched_count == 0
+    assert summary.attempts == 2
+
+
 def test_partial_status_when_some_data_and_error(tmp_path):
     db_path = tmp_path / "events.db"
     store = SQLiteEventStore(str(db_path))

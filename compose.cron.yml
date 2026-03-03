@@ -1,0 +1,16 @@
+# Use this overlay to run only the one-shot scraper manually without starting the scheduler:
+#   docker compose -f docker-compose.yml -f compose.cron.yml run --rm scraper
+#
+# The scheduler service in docker-compose.yml runs automatically at 08:00 daily.
+# To start it:
+#   docker compose up -d scheduler
+#
+# To change the schedule, set CRON_SCHEDULE in your .env, e.g.:
+#   CRON_SCHEDULE=0 6 * * *   (6am daily)
+#
+# To view scheduler logs:
+#   docker compose logs -f scheduler
+#   docker compose exec scheduler tail -f /var/log/garys_cron.log
+services:
+  scraper:
+    command: ["/app/scripts/run_once_entrypoint.sh"]

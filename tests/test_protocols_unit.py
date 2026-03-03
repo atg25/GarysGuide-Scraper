@@ -1,3 +1,5 @@
+import ast
+from pathlib import Path
 from typing import Dict, Iterable, List
 
 from garys_nyc_events.http import RequestsHttpClient
@@ -90,3 +92,16 @@ def test_run_once_accepts_stub_scraper(tmp_path):
 
     summary = run_once(config=cfg, scrape_func=lambda _cfg: scraper.get_events(), store=store)
     assert summary.fetched_count == 1
+
+
+def test_run_once_does_not_import_sqlite_at_module_level():
+    source = Path("src/garys_nyc_events/runner_once.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imported_names = {alias.name for alias in node.names}
+            assert "sqlite3" not in imported_names
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert not (module.endswith("storage") and any(alias.name == "SQLiteEventStore" for alias in node.names))

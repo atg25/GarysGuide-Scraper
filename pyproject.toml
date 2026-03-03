@@ -27,15 +27,24 @@ python = "^3.9"
 beautifulsoup4 = "^4.12.0"
 requests = "^2.31.0"
 croniter = "^2.0.0"
+python-dateutil = "^2.9.0"
+fastapi = ">=0.110.0"
+uvicorn = ">=0.28.0"
+httpx = ">=0.27"
+pydantic = ">=2.0"
 
 [tool.poetry.scripts]
 garys-events-run-once = "garys_nyc_events.runner_once:main"
 garys-events-validate-cron = "garys_nyc_events.scheduler:main"
+garys-events-api = "garys_nyc_events.api.app:create_app"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
 pytest-cov = "^4.0.0"
 twine = "^6.0.0"
+
+[tool.poetry.group.ai.dependencies]
+google-generativeai = "^0.8.0"
 
 [tool.pytest.ini_options]
 addopts = "-q --disable-warnings --maxfail=1"

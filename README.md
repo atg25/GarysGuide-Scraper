@@ -1,28 +1,20 @@
 # garys_nyc_events
 
-A Python package for scraping NYC tech events from [GarysGuide](https://www.garysguide.com/events), filtering them by keyword, and persisting them to a local SQLite database — all in a single command or Python call.
+A Python package that scrapes NYC tech events from [GarysGuide](https://www.garysguide.com/events), tags them with AI, persists them to SQLite, and exposes them through a REST API — all configurable via environment variables.
 
 ---
 
 ## What This Tool Does
 
 - **Scrapes** the GarysGuide NYC events page and extracts structured event data
-- **Filters** events by keyword (e.g. "AI", "Python", "startup")
-- **Persists** every run and its results to a local SQLite database with full history
-- **Formats** filtered events as clean JSON ready for downstream use (e.g. feeding an AI pipeline)
-- **Parses newsletter HTML** as a fallback data source when live scraping is not possible
+- **Tags events with AI** using Gemini, adding 3–7 descriptive labels per event (e.g. `["ai", "workshop", "free"]`)
+- **Filters** events by keyword (e.g. `AI`, `Python`, `startup`)
+- **Deduplicates** events across runs so repeat scrapes don't create duplicates
+- **Persists** every run and all events to a local SQLite database with full history
+- **Serves a REST API** (FastAPI) to query events, inspect run history, and trigger new scrapes
+- **Parses newsletter HTML** as a fallback data source when live scraping is unavailable
 - **Retries automatically** on transient network errors with configurable backoff
-- **Runs as a one-shot container** — schedule it externally with cron or Kubernetes
-
-Each event contains five fields:
-
-| Field    | Example                                   |
-| -------- | ----------------------------------------- |
-| `title`  | `"AI Demo Night at Cornell Tech"`         |
-| `date`   | `"Wed, Mar 5"`                            |
-| `price`  | `"FREE"` or `"$25"`                       |
-| `url`    | `"https://www.garysguide.com/events/..."` |
-| `source` | `"web"` or `"newsletter_fallback"`        |
+- **Runs as a one-shot container** or a **long-running cron scheduler** — your choice
 
 ---
 
@@ -32,7 +24,7 @@ Each event contains five fields:
 pip install garys_nyc_events
 ```
 
-Or, for local development with [Poetry](https://python-poetry.org/):
+For local development with [Poetry](https://python-poetry.org/):
 
 ```bash
 poetry install
@@ -40,26 +32,46 @@ poetry install
 
 ---
 
-## Usage
+## Quick Start
 
-### One-liner: scrape all events right now
+### Run the full pipeline once (scrape → tag → persist)
+
+```bash
+DB_PATH=./garys_events.db poetry run garys-events-run-once
+```
+
+This scrapes GarysGuide, tags events with Gemini (if `GEMINI_API_KEY` is set), applies any keyword filter, and saves everything to `garys_events.db`.
+
+Verify the database afterwards:
+
+```bash
+DB_PATH=./garys_events.db ./scripts/verify_db.sh
+```
+
+### Start the REST API
+
+```bash
+DB_PATH=./garys_events.db API_TOKEN=secret poetry run uvicorn garys_nyc_events.api.app:app
+```
+
+The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+
+---
+
+## Python Library Usage
+
+### Scrape events
 
 ```python
 from garys_nyc_events import scrape_default_garys_guide
 
+# One-liner — returns a list of event dicts
 events = scrape_default_garys_guide(delay_seconds=1.5)
-# returns a list of dicts: [{"title": ..., "date": ..., "price": ..., "url": ..., "source": ...}, ...]
-```
 
-### Scrape with the class (more control)
-
-```python
+# More control with the class
 from garys_nyc_events import GarysGuideScraper
 
-scraper = GarysGuideScraper(
-    delay_seconds=1.0,    # wait between requests (be polite)
-    timeout_seconds=10,   # per-request timeout
-)
+scraper = GarysGuideScraper(delay_seconds=1.0, timeout_seconds=10)
 events = scraper.get_events()
 ```
 
@@ -69,7 +81,7 @@ events = scraper.get_events()
 from garys_nyc_events import filter_events_by_keyword
 
 ai_events = filter_events_by_keyword(events, "AI")
-# case-insensitive title match — returns only matching events
+# Case-insensitive title match
 ```
 
 ### Export filtered events as JSON
@@ -78,13 +90,12 @@ ai_events = filter_events_by_keyword(events, "AI")
 from garys_nyc_events import get_events_ai_json
 
 json_str = get_events_ai_json(events, keyword="AI")
-print(json_str)
-# Pretty-printed JSON array of AI-related events
+print(json_str)  # Pretty-printed JSON array
 ```
 
 ### Parse a newsletter HTML export (fallback)
 
-If you have a GarysGuide newsletter saved as HTML (e.g. from your email client), you can extract events from it without making any network requests:
+If you have a GarysGuide newsletter saved as HTML from your email client, you can extract events without any network calls:
 
 ```python
 from garys_nyc_events import parse_newsletter_html
@@ -93,78 +104,140 @@ with open("newsletter.html") as f:
     raw_html = f.read()
 
 events = parse_newsletter_html(raw_html)
-# Returns event dicts with source="newsletter_fallback"
-# Automatically skips unsubscribe, social, and sponsor links
+# Events have source="newsletter_fallback"
+# Unsubscribe, social, and sponsor links are skipped automatically
 ```
 
-### Run the full pipeline (scrape + persist to SQLite)
+---
 
-```bash
-DB_PATH=./local_events.db poetry run garys-events-run-once
+## Event Schema
+
+Each event stored in the database and returned by the API contains:
+
+| Field         | Example                                   |
+| ------------- | ----------------------------------------- |
+| `id`          | `42`                                      |
+| `title`       | `"AI Demo Night at Cornell Tech"`         |
+| `date`        | `"Wed, Mar 5"`                            |
+| `time`        | `"7:00 PM"`                               |
+| `location`    | `"Cornell Tech, Roosevelt Island"`        |
+| `description` | `"Join us for demos from AI startups..."` |
+| `price`       | `"FREE"` or `"$25"`                       |
+| `url`         | `"https://www.garysguide.com/events/..."` |
+| `date_found`  | `"2026-03-03"`                            |
+| `tags`        | `["ai", "demo", "free", "networking"]`    |
+
+---
+
+## REST API
+
+The API is built with FastAPI. Start it with `uvicorn garys_nyc_events.api.app:app` or via Docker (see below).
+
+### Authentication
+
+Set `API_TOKEN` in your environment. All endpoints require a Bearer token:
+
+```
+Authorization: Bearer <your-token>
 ```
 
-This will:
+If `API_TOKEN` is not set, read endpoints are open. The `POST /runs/trigger` endpoint always requires a token.
 
-1. Scrape GarysGuide
-2. Apply any configured keyword filter and event limit
-3. Save the run metadata and all events to `local_events.db`
-4. Print a summary
+### Endpoints
 
-Verify the database afterward:
+| Method | Path            | Description                                      |
+| ------ | --------------- | ------------------------------------------------ |
+| `GET`  | `/health`       | Health check — returns status and DB event count |
+| `GET`  | `/events`       | List events with optional filters                |
+| `GET`  | `/events/{id}`  | Get a single event by ID                         |
+| `GET`  | `/runs`         | Get the most recent scrape run                   |
+| `POST` | `/runs/trigger` | Trigger a new scrape run immediately             |
+
+### `GET /events` query parameters
+
+| Parameter   | Default  | Description                                       |
+| ----------- | -------- | ------------------------------------------------- |
+| `ai_only`   | `true`   | Return only AI-tagged events                      |
+| `limit`     | `100`    | Maximum number of events to return (`0` = all)    |
+| `tags`      | `""`     | Comma-separated tag filter (e.g. `workshop,free`) |
+| `date_from` | _(none)_ | Start of date window (`YYYY-MM-DD`)               |
+| `date_to`   | _(none)_ | End of date window (`YYYY-MM-DD`)                 |
+
+**Example:**
 
 ```bash
-DB_PATH=./local_events.db ./scripts/verify_db.sh
+curl -H "Authorization: Bearer secret" \
+  "http://localhost:8000/events?ai_only=true&tags=workshop,free&limit=10"
 ```
 
 ---
 
 ## Configuration
 
-All settings are controlled via environment variables. No config files needed.
+All settings are environment variables. No config files needed.
 
-| Variable                | Default                 | What it does                                         |
-| ----------------------- | ----------------------- | ---------------------------------------------------- |
-| `DB_PATH`               | `/data/garys_events.db` | Path to the SQLite database file                     |
-| `SCRAPER_SEARCH_TERM`   | _(none)_                | Keyword to filter event titles (e.g. `AI`, `crypto`) |
-| `SCRAPER_LIMIT`         | `0`                     | Max events to keep per run (`0` = keep all)          |
-| `SCRAPER_STRATEGY`      | `web`                   | Scraper backend (`web` is the only current option)   |
-| `RETRY_ATTEMPTS`        | `3`                     | How many times to retry on a network failure         |
-| `RETRY_BACKOFF_SECONDS` | `5`                     | Seconds to wait between retries (linear backoff)     |
-| `API_TOKEN`             | _(none)_                | Reserved for a future API-based scraper strategy     |
+| Variable                    | Default             | Description                                                            |
+| --------------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `DB_PATH`                   | `./garys_events.db` | Path to the SQLite database file                                       |
+| `SCRAPER_SEARCH_TERM`       | _(none)_            | Keyword to filter event titles (e.g. `AI`, `crypto`)                   |
+| `SCRAPER_LIMIT`             | `0`                 | Max events to keep per run (`0` = keep all)                            |
+| `SCRAPER_STRATEGY`          | `web`               | Scraper backend (`web` is the only current option)                     |
+| `SCRAPER_DEDUP_WINDOW_DAYS` | `0`                 | Skip events already seen within this many days (`0` = no dedup window) |
+| `RETRY_ATTEMPTS`            | `3`                 | How many times to retry on a network failure                           |
+| `RETRY_BACKOFF_SECONDS`     | `5`                 | Seconds to wait between retries                                        |
+| `GEMINI_API_KEY`            | _(none)_            | Gemini API key for AI tagging (tagging skipped if unset)               |
+| `TAGGING_ENABLED`           | `true`              | Set to `false` to disable AI tagging entirely                          |
+| `API_TOKEN`                 | _(none)_            | Bearer token to protect the REST API                                   |
+| `CRON_SCHEDULE`             | `0 8 * * *`         | Cron expression for the scheduler service                              |
 
-**Example — filter to AI events and cap at 20:**
+**Example — filter to AI events, cap at 20, tag with Gemini:**
 
 ```bash
-SCRAPER_SEARCH_TERM=AI SCRAPER_LIMIT=20 DB_PATH=./events.db poetry run garys-events-run-once
+SCRAPER_SEARCH_TERM=AI \
+SCRAPER_LIMIT=20 \
+GEMINI_API_KEY=your-key \
+DB_PATH=./garys_events.db \
+poetry run garys-events-run-once
 ```
 
 ---
 
-## Docker (One-Shot Container)
+## Docker
 
-The container runs once and exits. Schedule it externally — no cron daemon runs inside the image.
+The project includes two Docker services in `docker-compose.yml`:
+
+| Service     | Behavior                                                         |
+| ----------- | ---------------------------------------------------------------- |
+| `scraper`   | Runs once and exits — use with external cron or `run --rm`       |
+| `scheduler` | Long-running container that fires the scraper on a cron schedule |
+
+### One-shot scrape
 
 ```bash
-# Build the image
+# Build
 docker compose build scraper
 
-# Run one scrape pass
+# Run once
 docker compose run --rm scraper
+
+# Override settings at runtime
+docker compose run --rm -e SCRAPER_SEARCH_TERM=AI -e GEMINI_API_KEY=your-key scraper
 ```
 
-**Override the DB path or filter at runtime:**
+### Cron scheduler (runs automatically)
 
 ```bash
-docker compose run --rm -e DB_PATH=/data/events.db -e SCRAPER_SEARCH_TERM=AI scraper
+# Start the scheduler (runs daily at 8 AM by default)
+docker compose up -d scheduler
+
+# Change the schedule via .env
+echo "CRON_SCHEDULE=0 6 * * *" >> .env
+
+# View scheduler logs
+docker compose logs -f scheduler
 ```
 
-**Schedule with host cron (every day at 8 AM):**
-
-```cron
-0 8 * * * cd /path/to/project && docker compose run --rm scraper
-```
-
-**Or use the included Kubernetes CronJob manifest:**
+### Kubernetes CronJob
 
 ```bash
 kubectl apply -f deploy/k8s-cronjob.yaml
@@ -178,11 +251,11 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full deployment details.
 
 Events are stored in three tables:
 
-- **`runs`** — one row per pipeline execution (timestamp, status, source, attempts)
-- **`products`** — deduplicated event records (title + URL = unique key)
-- **`product_snapshots`** — links each run to the events captured in that run
-
-This lets you query event history across runs and detect when events appear or disappear.
+| Table           | Contents                                                     |
+| --------------- | ------------------------------------------------------------ |
+| `runs`          | One row per pipeline execution (timestamp, status, attempts) |
+| `all events`    | Deduplicated event records across all scrapes                |
+| `weekly_events` | View of events in the upcoming 7-day window                  |
 
 ---
 
@@ -205,20 +278,22 @@ Transient errors (`ScraperNetworkError`) are retried automatically. Non-transien
 
 The package is split into focused, single-purpose modules:
 
-| Module                 | Responsibility                                     |
-| ---------------------- | -------------------------------------------------- |
-| `scraper.py`           | HTTP fetching and HTML parsing of GarysGuide pages |
-| `runner_once.py`       | Pipeline orchestration (scrape → filter → persist) |
-| `storage.py`           | SQLite persistence (`SQLiteEventStore`)            |
-| `filters.py`           | Keyword filtering logic                            |
-| `formatters.py`        | JSON serialization for AI/downstream use           |
-| `newsletter_parser.py` | Parses newsletter HTML exports as a fallback       |
-| `http.py`              | `requests` adapter — the only file that uses HTTP  |
-| `protocols.py`         | `typing.Protocol` interfaces for all boundaries    |
-| `exceptions.py`        | Domain exception hierarchy                         |
-| `models.py`            | `Event` dataclass                                  |
-| `config.py`            | Loads configuration from environment variables     |
-| `scheduler.py`         | Retry/backoff helpers                              |
+| Module                 | Responsibility                                           |
+| ---------------------- | -------------------------------------------------------- |
+| `scraper.py`           | HTTP fetching and HTML parsing of GarysGuide pages       |
+| `runner_once.py`       | Pipeline orchestration (scrape → tag → filter → persist) |
+| `tagger.py`            | Gemini AI tagging (`GeminiTagger`)                       |
+| `storage.py`           | SQLite persistence (`SQLiteEventStore`)                  |
+| `filters.py`           | Keyword and date-window filtering                        |
+| `formatters.py`        | JSON serialization for downstream use                    |
+| `newsletter_parser.py` | Parses newsletter HTML exports as a fallback             |
+| `http.py`              | `requests` adapter — the only module that hits HTTP      |
+| `protocols.py`         | `typing.Protocol` interfaces for all boundaries          |
+| `exceptions.py`        | Domain exception hierarchy                               |
+| `models.py`            | `Event` dataclass                                        |
+| `config.py`            | Loads `PipelineConfig` from environment variables        |
+| `scheduler.py`         | Retry/backoff helpers                                    |
+| `api/`                 | FastAPI application, routers, auth, and schemas          |
 
 ---
 

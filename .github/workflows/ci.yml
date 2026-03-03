@@ -35,3 +35,52 @@ jobs:
       - name: Run tests
         run: |
           poetry run pytest
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build -t garys-nyc-events:test .
+
+      - name: Verify no cron binary
+        run: |
+          if docker run --rm garys-nyc-events:test which cron >/dev/null 2>&1; then
+            echo "FAIL: cron found in image"
+            exit 1
+          fi
+          echo "OK: no cron binary in image"
+
+      - name: Verify one-shot exit and logs
+        run: |
+          set +e
+          output=$(docker run --rm -e DB_PATH=/tmp/garys_events.db garys-nyc-events:test 2>&1)
+          code=$?
+          set -e
+
+          if [[ "$code" -ne 0 && "$code" -ne 1 ]]; then
+            echo "FAIL: unexpected exit code $code"
+            echo "$output"
+            exit 1
+          fi
+
+          echo "$output" | grep -q "run_id="
+
+      - name: Verify mounted DB file created
+        run: |
+          tmp_data_dir=$(mktemp -d)
+          set +e
+          docker run --rm -e DB_PATH=/data/garys_events.db -v "$tmp_data_dir:/data" garys-nyc-events:test >/dev/null 2>&1
+          code=$?
+          set -e
+
+          if [[ "$code" -ne 0 && "$code" -ne 1 ]]; then
+            echo "FAIL: unexpected mounted run exit code $code"
+            exit 1
+          fi
+
+          test -f "$tmp_data_dir/garys_events.db"

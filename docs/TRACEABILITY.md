@@ -2,7 +2,7 @@
 
 | Requirement                                           | Implementation Artifact                                                         | Verification Step                                                           |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Persist scraper output to SQLite                      | `src/garys_nyc_events/storage.py` (`runs`, `products`, `product_snapshots`)     | `pytest tests/test_storage_unit.py`                                         |
+| Persist scraper output to SQLite                      | `src/garys_nyc_events/storage.py` (`runs`, `all events`, `weekly_events`)       | `pytest tests/test_storage_unit.py`                                         |
 | One-shot runner command                               | `src/garys_nyc_events/runner_once.py`, script `garys-events-run-once`           | `DB_PATH=./local_events.db poetry run garys-events-run-once`                |
 | Cron schedule parsing                                 | `src/garys_nyc_events/scheduler.py`                                             | `pytest tests/test_scheduler_unit.py::test_validate_cron_schedule_positive` |
 | Retry/backoff transient failures                      | `run_once()` + `is_transient_error()`                                           | `pytest tests/test_scheduler_unit.py::test_retry_on_transient_error`        |

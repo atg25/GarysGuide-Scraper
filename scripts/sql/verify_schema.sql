@@ -1,4 +1,4 @@
 SELECT name, type
 FROM sqlite_master
 WHERE type IN ('table', 'index')
-  AND name IN ('runs', 'products', 'product_snapshots');
+  AND name IN ('runs', 'all events', 'weekly_events');
