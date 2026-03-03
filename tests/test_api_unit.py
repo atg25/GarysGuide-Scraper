@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 from garys_nyc_events.api.app import create_app
@@ -38,6 +40,7 @@ def _seed_events(db_path: str):
                 "tags": ["social"],
             },
         ],
+        today=date(2026, 2, 26),
     )
 
 

@@ -1,3 +1,5 @@
+from datetime import date
+
 from garys_nyc_events.storage import SQLiteEventStore
 
 
@@ -33,6 +35,7 @@ def test_successful_write_and_snapshot(tmp_path):
                     "date": "2026-02-27",
             }
         ],
+        today=date(2026, 2, 26),
     )
 
     assert run.status == "success"
@@ -63,6 +66,7 @@ def test_dedupe_upsert_by_url(tmp_path):
         attempts=1,
         error="",
         events=[event],
+        today=date(2026, 2, 26),
     )
 
     store.persist_run(
@@ -74,6 +78,7 @@ def test_dedupe_upsert_by_url(tmp_path):
         attempts=1,
         error="",
         events=[event],
+        today=date(2026, 2, 26),
     )
 
     assert store.count_rows("runs") == 2
@@ -95,6 +100,7 @@ def test_failed_run_persistence(tmp_path):
         attempts=3,
         error="timeout",
         events=[],
+        today=date(2026, 2, 26),
     )
 
     latest = store.fetch_latest_run()
@@ -145,6 +151,7 @@ def test_url_normalization_strips_query_params(tmp_path):
                 "date": "2026-02-27",
             }
         ],
+        today=date(2026, 2, 26),
     )
     store.persist_run(
         source="web",
@@ -162,6 +169,7 @@ def test_url_normalization_strips_query_params(tmp_path):
                 "date": "2026-02-27",
             }
         ],
+        today=date(2026, 2, 26),
     )
 
     assert store.count_rows("all events") == 1
@@ -189,6 +197,7 @@ def test_url_normalization_strips_fragment(tmp_path):
                 "date": "2026-02-27",
             }
         ],
+        today=date(2026, 2, 26),
     )
     store.persist_run(
         source="web",
@@ -206,6 +215,7 @@ def test_url_normalization_strips_fragment(tmp_path):
                 "date": "2026-02-27",
             }
         ],
+        today=date(2026, 2, 26),
     )
 
     assert store.count_rows("all events") == 1
@@ -237,6 +247,7 @@ def test_ten_runs_same_five_events_still_five_rows(tmp_path):
             attempts=1,
             error="",
             events=events,
+            today=date(2026, 2, 26),
         )
 
     assert store.count_rows("all events") == 5
@@ -273,6 +284,7 @@ def test_fetch_events_returns_no_duplicates(tmp_path):
                     "description": "Machine learning workshop",
                 },
             ],
+            today=date(2026, 2, 26),
         )
 
     events = store.fetch_events()
@@ -316,6 +328,7 @@ def test_fetch_events_ai_only_filters_correctly(tmp_path):
                 "description": "food meetup",
             },
         ],
+        today=date(2026, 2, 26),
     )
 
     ai_events = store.fetch_events(ai_only=True)
@@ -344,6 +357,7 @@ def test_fetch_events_ai_only_returns_empty_for_no_matches(tmp_path):
                 "description": "food meetup",
             },
         ],
+        today=date(2026, 2, 26),
     )
 
     assert store.fetch_events(ai_only=True) == []

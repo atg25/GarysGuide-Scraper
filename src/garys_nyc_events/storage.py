@@ -170,7 +170,7 @@ class SQLiteEventStore:
             raise RuntimeError("Failed to resolve product id after upsert")
         return int(row["id"])
 
-    def _refresh_weekly_events(self, conn: sqlite3.Connection) -> None:
+    def _refresh_weekly_events(self, conn: sqlite3.Connection, today: Optional[date] = None) -> None:
         rows = conn.execute(
             '''
             SELECT
@@ -205,7 +205,7 @@ class SQLiteEventStore:
             for row in rows
         ]
 
-        weekly = filter_events_upcoming_week(all_events, today=date.today())
+        weekly = filter_events_upcoming_week(all_events, today=today or date.today())
 
         conn.execute("DELETE FROM weekly_events")
         for event in weekly:
@@ -259,6 +259,7 @@ class SQLiteEventStore:
         attempts: int,
         error: str,
         events: Iterable[Dict[str, str]],
+        today: Optional[date] = None,
     ) -> RunRecord:
         event_list: List[Dict[str, str]] = list(events)
         with self._connect() as conn:
@@ -294,7 +295,7 @@ class SQLiteEventStore:
             for event in event_list:
                 self._upsert_all_event(conn, event, date_found=observed_at)
 
-            self._refresh_weekly_events(conn)
+            self._refresh_weekly_events(conn, today=today)
 
         return RunRecord(
             run_id=run_id,

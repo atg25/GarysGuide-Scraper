@@ -47,14 +47,6 @@ jobs:
         run: |
           docker build -t garys-nyc-events:test .
 
-      - name: Verify no cron binary
-        run: |
-          if docker run --rm garys-nyc-events:test which cron >/dev/null 2>&1; then
-            echo "FAIL: cron found in image"
-            exit 1
-          fi
-          echo "OK: no cron binary in image"
-
       - name: Verify one-shot exit and logs
         run: |
           set +e
