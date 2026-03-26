@@ -1,0 +1,44 @@
+services:
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp-staging
+    container_name: garys-events-mcp-staging
+    restart: unless-stopped
+    environment:
+      GARYS_EVENTS_MCP_ENABLED: "true"
+      GARYS_EVENTS_REST_API_BASE_URL: "${GARYS_EVENTS_REST_API_BASE_URL:-http://api:9000}"
+      GARYS_EVENTS_REST_API_TIMEOUT_MS: "${GARYS_EVENTS_REST_API_TIMEOUT_MS:-5000}"
+      GARYS_EVENTS_MCP_FAIL_OPEN: "${GARYS_EVENTS_MCP_FAIL_OPEN:-true}"
+    ports:
+      - "9000:9000"
+    # MCP server communicates via stdio; stdio is inherited by parent process
+    stdin_open: true
+    tty: true
+    networks:
+      - garys-events-staging
+
+  # Optional: Mock REST API for failure injection testing
+  mock-api:
+    image: mockoon/mockoon:7.0.0
+    container_name: garys-events-api-mock
+    restart: unless-stopped
+    volumes:
+      - ./tests/mock-api-spec.json:/data/mock-api-spec.json
+    ports:
+      - "9001:3000"
+    environment:
+      DATA_FILE: /data/mock-api-spec.json
+    networks:
+      - garys-events-staging
+    profiles:
+      - testing
+
+networks:
+  garys-events-staging:
+    driver: bridge
+    name: garys-events-staging
+
+volumes:
+  garys_events_staging:
+    name: garys_events_staging_data

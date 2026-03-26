@@ -1,0 +1,31 @@
+FROM python:3.12-slim AS build
+
+WORKDIR /app
+
+COPY pyproject.toml README.md LICENSE CHANGELOG.md /app/
+COPY src /app/src
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip wheel --no-cache-dir --wheel-dir /wheels .
+
+
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    GARYS_EVENTS_MCP_ENABLED=true
+
+WORKDIR /app
+
+COPY --from=build /wheels /wheels
+
+RUN pip install --no-cache-dir /wheels/*.whl \
+    && rm -rf /wheels
+
+EXPOSE 9000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9000/health', timeout=5)" || exit 1
+
+# MCP server entrypoint: listens on stdio for MCP protocol
+CMD ["python", "-m", "garys_nyc_events.mcp.server"]
