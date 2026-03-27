@@ -17,7 +17,9 @@ def require_api_token(
         return
 
     if credentials is None or credentials.credentials != config.api_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API token"
+        )
 
 
 def require_api_token_for_mutation(
@@ -25,7 +27,12 @@ def require_api_token_for_mutation(
 ) -> None:
     config = get_config()
     if not config.api_token:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="API auth not configured")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API auth not configured",
+        )
 
     if credentials is None or credentials.credentials != config.api_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API token"
+        )

@@ -89,7 +89,7 @@ class SQLiteEventStore:
             connection.execute("PRAGMA foreign_keys = ON;")
             yield connection
             connection.commit()
-        except BaseException:
+        except Exception:
             connection.rollback()
             raise
         finally:
@@ -165,14 +165,18 @@ class SQLiteEventStore:
             ),
         )
 
-        row = conn.execute('SELECT id FROM "all events" WHERE canonical_key = ?', (key,)).fetchone()
+        row = conn.execute(
+            'SELECT id FROM "all events" WHERE canonical_key = ?', (key,)
+        ).fetchone()
         if row is None:
-            raise RuntimeError("Failed to resolve product id after upsert")
+            raise RuntimeError("Failed to resolve event id after upsert")
         return int(row["id"])
 
-    def _refresh_weekly_events(self, conn: sqlite3.Connection, today: Optional[date] = None) -> None:
+    def _refresh_weekly_events(
+        self, conn: sqlite3.Connection, today: Optional[date] = None
+    ) -> None:
         rows = conn.execute(
-            '''
+            """
             SELECT
                 id,
                 name,
@@ -185,8 +189,7 @@ class SQLiteEventStore:
                 event_location,
                 date_found
             FROM "all events"
-            WHERE date(date_found) >= date('2026-02-27')
-            '''
+            """
         ).fetchall()
 
         all_events = [
@@ -307,7 +310,9 @@ class SQLiteEventStore:
 
     def fetch_latest_run(self) -> Optional[sqlite3.Row]:
         with self._connect() as conn:
-            return conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+            return conn.execute(
+                "SELECT * FROM runs ORDER BY id DESC LIMIT 1"
+            ).fetchone()
 
     def count_rows(self, table_name: str) -> int:
         aliases = {
@@ -320,7 +325,9 @@ class SQLiteEventStore:
             row = conn.execute(f"SELECT COUNT(*) AS count FROM {resolved}").fetchone()
             return int(row["count"]) if row else 0
 
-    def fetch_events(self, *, limit: int = 0, ai_only: bool = False) -> List[Dict[str, str]]:
+    def fetch_events(
+        self, *, limit: int = 0, ai_only: bool = False
+    ) -> List[Dict[str, str]]:
         query = """
             SELECT
                 w.all_event_id AS id,

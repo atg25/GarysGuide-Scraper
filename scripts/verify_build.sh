@@ -3,12 +3,12 @@ set -euo pipefail
 
 docker build -t garys-nyc-events:test .
 
-if docker run --rm garys-nyc-events:test which cron >/dev/null 2>&1; then
-	echo "FAIL: cron found in image"
+if ! docker run --rm garys-nyc-events:test which cron >/dev/null 2>&1; then
+	echo "FAIL: cron binary missing from image"
 	exit 1
 fi
 
-echo "OK: no cron binary in image"
+echo "OK: cron binary present in image"
 
 set +e
 run_output="$(docker run --rm -e DB_PATH=/tmp/garys_events.db garys-nyc-events:test 2>&1)"

@@ -1,5 +1,11 @@
 import garys_nyc_events
-from garys_nyc_events import Event, EventScraper, EventStore, GarysGuideScraper, scrape_default_garys_guide
+from garys_nyc_events import (
+    Event,
+    EventScraper,
+    EventStore,
+    GarysGuideScraper,
+    scrape_default_garys_guide,
+)
 
 
 def test_public_api_exports():

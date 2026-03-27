@@ -9,6 +9,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMMAND="${1:-build}"
 STAGING_ENV_FILE="${PROJECT_ROOT}/.env.staging"
+PYTHON_BIN="${PYTHON_BIN:-}"
+
+if [ -z "$PYTHON_BIN" ]; then
+    if command -v python >/dev/null 2>&1; then
+        PYTHON_BIN="python"
+    elif command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN="python3"
+    else
+        echo "[ERROR] Neither python nor python3 found in PATH" >&2
+        exit 1
+    fi
+fi
 
 # Color output
 RED='\033[0;31m'
@@ -67,14 +79,14 @@ test_staging_deployment() {
     log_info "Testing MCP ListTools contract..."
     echo '{"method":"ListTools","params":{}}' | \
         docker exec -i garys-events-mcp-staging python -m garys_nyc_events.mcp.server 2>/dev/null | \
-        python -m json.tool | grep -q "garys_events.query_events" || log_error "ListTools contract failed"
+        "$PYTHON_BIN" -m json.tool | grep -q "garys_events.query_events" || log_error "ListTools contract failed"
     log_info "✓ ListTools contract validated"
     
     # Test 3: Validate MCP contract (CallTool with invalid args should return error, not crash)
     log_info "Testing MCP CallTool error contract..."
     echo '{"method":"CallTool","params":{"name":"garys_events.query_events","arguments":{"limit":"invalid"}}}' | \
         docker exec -i garys-events-mcp-staging python -m garys_nyc_events.mcp.server 2>/dev/null | \
-        python -m json.tool | grep -q "ok" || log_error "CallTool error contract failed"
+        "$PYTHON_BIN" -m json.tool | grep -q "ok" || log_error "CallTool error contract failed"
     log_info "✓ CallTool contract validated"
     
     log_info "All staging tests passed ✓"

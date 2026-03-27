@@ -1,5 +1,6 @@
 import ast
 from pathlib import Path
+from datetime import date
 from typing import Dict, Iterable, List
 
 from garys_nyc_events.http import RequestsHttpClient
@@ -13,7 +14,14 @@ from tests.http_doubles import StubHttpClient, StubHttpResponse
 
 class StubScraper:
     def get_events(self) -> List[Dict[str, str]]:
-        return [{"title": "AI Event", "url": "https://www.garysguide.com/events/1", "price": "FREE", "date": "Wed"}]
+        return [
+            {
+                "title": "AI Event",
+                "url": "https://www.garysguide.com/events/1",
+                "price": "FREE",
+                "date": "Wed",
+            }
+        ]
 
 
 class StubStore:
@@ -35,6 +43,7 @@ class StubStore:
         attempts: int,
         error: str,
         events: Iterable[Dict[str, str]],
+        today: date | None = None,
     ) -> object:
         self.persisted = True
         event_list = list(events)
@@ -75,7 +84,12 @@ def test_run_once_accepts_in_memory_stub_store(tmp_path):
     summary = run_once(
         config=cfg,
         scrape_func=lambda _cfg: [
-            {"title": "AI Event", "url": "https://www.garysguide.com/events/1", "price": "FREE", "date": "Wed"}
+            {
+                "title": "AI Event",
+                "url": "https://www.garysguide.com/events/1",
+                "price": "FREE",
+                "date": "Wed",
+            }
         ],
         store=store,
     )
@@ -90,7 +104,9 @@ def test_run_once_accepts_stub_scraper(tmp_path):
     cfg = PipelineConfig(db_path=str(tmp_path / "events.db"))
     scraper = StubScraper()
 
-    summary = run_once(config=cfg, scrape_func=lambda _cfg: scraper.get_events(), store=store)
+    summary = run_once(
+        config=cfg, scrape_func=lambda _cfg: scraper.get_events(), store=store
+    )
     assert summary.fetched_count == 1
 
 
@@ -104,4 +120,7 @@ def test_run_once_does_not_import_sqlite_at_module_level():
             assert "sqlite3" not in imported_names
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            assert not (module.endswith("storage") and any(alias.name == "SQLiteEventStore" for alias in node.names))
+            assert not (
+                module.endswith("storage")
+                and any(alias.name == "SQLiteEventStore" for alias in node.names)
+            )

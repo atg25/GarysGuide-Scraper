@@ -58,8 +58,7 @@ class GarysGuideScraper:
         return {
             "User-Agent": self.user_agent,
             "Accept": (
-                "text/html,application/xhtml+xml,application/xml;"
-                "q=0.9,*/*;q=0.8"
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
             ),
         }
 
@@ -117,7 +116,13 @@ class GarysGuideScraper:
             if value:
                 return value
         # Generic fallback selectors
-        for selector in [".venue", ".location", "[class*=venue]", "[class*=location]", "[class*=address]"]:
+        for selector in [
+            ".venue",
+            ".location",
+            "[class*=venue]",
+            "[class*=location]",
+            "[class*=address]",
+        ]:
             tag = element.select_one(selector)
             if tag is None:
                 continue
@@ -190,9 +195,7 @@ class GarysGuideScraper:
         element: Tag,
     ) -> Tuple[str, str]:
         if element.name == "tr":
-            table_date, table_price = self._extract_date_and_price_from_table(
-                element
-            )
+            table_date, table_price = self._extract_date_and_price_from_table(element)
             if table_date and table_price:
                 return table_date, table_price
         return self._extract_date_and_price_from_text_blob(element)

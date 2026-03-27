@@ -1,41 +1,35 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Dict, Iterable, List, Optional, Protocol, runtime_checkable
 
 
 @runtime_checkable
 class RunRecordLike(Protocol):
     @property
-    def run_id(self) -> int:
-        ...
+    def run_id(self) -> int: ...
 
     @property
-    def status(self) -> str:
-        ...
+    def status(self) -> str: ...
 
     @property
-    def fetched_count(self) -> int:
-        ...
+    def fetched_count(self) -> int: ...
 
     @property
-    def attempts(self) -> int:
-        ...
+    def attempts(self) -> int: ...
 
     @property
-    def error(self) -> str:
-        ...
+    def error(self) -> str: ...
 
 
 @runtime_checkable
 class EventScraper(Protocol):
-    def get_events(self) -> List[Dict[str, str]]:
-        ...
+    def get_events(self) -> List[Dict[str, str]]: ...
 
 
 @runtime_checkable
 class EventStore(Protocol):
-    def init_schema(self) -> None:
-        ...
+    def init_schema(self) -> None: ...
 
     def persist_run(
         self,
@@ -48,21 +42,20 @@ class EventStore(Protocol):
         attempts: int,
         error: str,
         events: Iterable[Dict[str, str]],
-    ) -> RunRecordLike:
-        ...
+        today: Optional[date] = None,
+    ) -> RunRecordLike: ...
 
-    def fetch_events(self, *, limit: int = 0, ai_only: bool = False) -> List[Dict[str, str]]:
-        ...
+    def fetch_events(
+        self, *, limit: int = 0, ai_only: bool = False
+    ) -> List[Dict[str, str]]: ...
 
 
 @runtime_checkable
 class HttpResponse(Protocol):
     @property
-    def text(self) -> str:
-        ...
+    def text(self) -> str: ...
 
-    def raise_for_status(self) -> None:
-        ...
+    def raise_for_status(self) -> None: ...
 
 
 @runtime_checkable
@@ -73,5 +66,4 @@ class HttpClient(Protocol):
         *,
         headers: Dict[str, str],
         timeout: int,
-    ) -> HttpResponse:
-        ...
+    ) -> HttpResponse: ...

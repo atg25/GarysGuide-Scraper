@@ -7,7 +7,7 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class PipelineConfig:
-    cron_schedule: str = "0 */6 * * *"
+    cron_schedule: str = "0 8 * * *"
     timezone: str = "UTC"
     scraper_strategy: str = "web"
     scraper_search_term: str = ""
@@ -21,13 +21,11 @@ class PipelineConfig:
     api_token: Optional[str] = None
 
 
-
 def _env_int(name: str, default: int) -> int:
     value = os.getenv(name)
     if value is None or value.strip() == "":
         return default
     return int(value)
-
 
 
 def _env_float(name: str, default: float) -> float:
@@ -37,10 +35,9 @@ def _env_float(name: str, default: float) -> float:
     return float(value)
 
 
-
 def load_config_from_env() -> PipelineConfig:
     return PipelineConfig(
-        cron_schedule=os.getenv("CRON_SCHEDULE", "0 */6 * * *"),
+        cron_schedule=os.getenv("CRON_SCHEDULE", "0 8 * * *"),
         timezone=os.getenv("TZ", "UTC"),
         scraper_strategy=os.getenv("SCRAPER_STRATEGY", "web"),
         scraper_search_term=os.getenv("SCRAPER_SEARCH_TERM", ""),
@@ -49,7 +46,7 @@ def load_config_from_env() -> PipelineConfig:
         retry_attempts=_env_int("RETRY_ATTEMPTS", 3),
         retry_backoff_seconds=_env_float("RETRY_BACKOFF_SECONDS", 5.0),
         scraper_dedup_window_days=_env_int("SCRAPER_DEDUP_WINDOW_DAYS", 0),
-        gemini_api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GEMNINI_API_KEY"),
+        gemini_api_key=os.getenv("GEMINI_API_KEY"),
         tagging_enabled=os.getenv("TAGGING_ENABLED", "true").lower() != "false",
         api_token=os.getenv("API_TOKEN"),
     )

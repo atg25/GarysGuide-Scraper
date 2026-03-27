@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "code": "validation_error",
+    "message": "Invalid input",
+    "retriable": false
+  }
+}

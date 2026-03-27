@@ -68,8 +68,8 @@ sqlite3 ./garys_events.db < scripts/sql/verify_latest_runs.sql
 sqlite3 ./garys_events.db < scripts/sql/verify_snapshot_counts.sql
 ```
 
-## Why No Cron in Container
+## Cron in Container
 
-- One process per container keeps startup, shutdown, and signal handling predictable.
-- Logs stay in container stdout/stderr for normal Docker and orchestrator aggregation.
-- Scheduling belongs to host cron, Kubernetes CronJob, or a workflow orchestrator.
+- The `scheduler` service runs cron in the container and triggers `/app/scripts/run_once_entrypoint.sh` on `CRON_SCHEDULE`.
+- Scheduler logs are written to `/var/log/garys_cron.log`; scrape logs continue to emit run summaries for visibility.
+- For external orchestrators, keep using `scraper` as one-shot and schedule that service outside Docker.

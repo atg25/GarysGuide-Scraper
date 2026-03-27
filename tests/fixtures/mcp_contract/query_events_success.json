@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "data": {
+    "count": 1,
+    "events": [
+      {
+        "id": 1,
+        "title": "NYC AI Summit",
+        "date": "2026-02-27",
+        "time": "7:00 PM",
+        "location": "NYC",
+        "description": "AI builders",
+        "date_found": "2026-02-26T00:00:00+00:00",
+        "price": "FREE",
+        "url": "https://www.garysguide.com/events/1",
+        "tags": ["ai", "summit"]
+      }
+    ]
+  }
+}

@@ -40,7 +40,9 @@ def _parse_event_date(value: str, today: date) -> Optional[date]:
     if not cleaned:
         return None
     try:
-        parsed = date_parser.parse(cleaned, fuzzy=True, default=date_parser.parse(str(today)))
+        parsed = date_parser.parse(
+            cleaned, fuzzy=True, default=date_parser.parse(str(today))
+        )
     except (ValueError, OverflowError):
         return None
     return parsed.date()

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends
 
 from ...config import PipelineConfig
@@ -31,17 +29,13 @@ def list_runs(store=Depends(get_store)):
     ]
 
 
-@router.post("/trigger", response_model=TriggerRunOut, dependencies=[Depends(require_api_token_for_mutation)])
+@router.post(
+    "/trigger",
+    response_model=TriggerRunOut,
+    dependencies=[Depends(require_api_token_for_mutation)],
+)
 def trigger_run(config: PipelineConfig = Depends(get_config), store=Depends(get_store)):
-    summary = run_once(
-        config=PipelineConfig(
-            **{
-                **config.__dict__,
-                "db_path": config.db_path,
-            }
-        ),
-        store=store,
-    )
+    summary = run_once(config=config, store=store)
     return TriggerRunOut(
         message="Run triggered",
         run=RunOut(

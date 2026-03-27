@@ -3,7 +3,7 @@
 **To:** Gary's Guide PyPack Development Team  
 **From:** Project Governance (on behalf of Midterm_Ordo Integration)  
 **Date (Timestamp):** 2026-03-26T14:50:00Z  
-**Last Updated:** 2026-03-26T19:05:00Z (Slot 8 Re-Score PASS)  
+**Last Updated:** 2026-03-26T18:55:00Z (Slot 8 RE-SCORED TO PASS)  
 **Status:** SPRINT 20 UNBLOCKED – PHASE 1 COMPLETE; PHASE 2 ACTIVE
 
 ---
@@ -20,7 +20,7 @@ Midterm_Ordo delivered all first-drop artifacts (2026-03-26T15:20:00Z), remediat
 - ✅ Midterm evidence packet received & re-scored (2026-03-26T15:20:00Z → 2026-03-26T16:05:00Z)
   - **Slot 1: CONDITIONAL → ✅ PASS** (Lifecycle test evidence complete)
   - **Slots 2-7: ✅ PROVISIONAL_PASS** (Targeted evidence verified)
-  - **Slot 8: ✅ PASS** (full-repo gates green: test/typecheck/lint strict all pass)
+  - **Slot 8: ✅ PASS** (Slot 8 follow-up re-score: test/typecheck/lint strict all pass, exit codes 0)
 - 🚀 **Phase 2:** ACTIVE (staging handoff dispatched)
 - 🔒 **Final merge:** remains governed by Phase 4 approval policy
 
@@ -41,7 +41,7 @@ All 8 required matrix slots implemented and tested on Midterm side. **Phase 1 re
 | 5   | Alias deterministic mapping  | Alias mapping test snippet provided                                             | ✅ PROVISIONAL PASS | ✅ **PROVISIONAL PASS**                |
 | 6   | Tool-count updates           | Assertions + targeted outputs provided                                          | ✅ PROVISIONAL PASS | ✅ **PROVISIONAL PASS**                |
 | 7   | Role visibility/blocking     | Role tests + outputs provided                                                   | ✅ PROVISIONAL PASS | ✅ **PROVISIONAL PASS**                |
-| 8   | Midterm quality gates        | Follow-up packet: 1632/1632 tests pass, typecheck exit 0, lint strict exit 0    | ❌ FAIL             | ✅ **PASS**                            |
+| 8   | Midterm quality gates        | Follow-up packet: 1632/1632 tests pass, typecheck exit 0, lint strict exit 0    | ❌ FAIL             | ✅ **PASS** (2026-03-26T18:55:00Z)     |
 
 **Full details:** [docs/PYPACK_PHASE1_REMEDIATION_RESPONSE.md](PYPACK_PHASE1_REMEDIATION_RESPONSE.md) (formal re-score letter)  
 **Matrix:** [docs/CROSS_REPO_RELEASE_GATE_MATRIX.md](CROSS_REPO_RELEASE_GATE_MATRIX.md) (updated with verification log entries)

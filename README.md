@@ -137,7 +137,7 @@ The API is built with FastAPI. Start it with `uvicorn garys_nyc_events.api.app:a
 
 Set `API_TOKEN` in your environment. All endpoints require a Bearer token:
 
-```
+```text
 Authorization: Bearer <your-token>
 ```
 

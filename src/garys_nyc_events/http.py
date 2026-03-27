@@ -26,11 +26,15 @@ class RequestsHttpResponse:
 
 
 class RequestsHttpClient:
-    def get(self, url: str, *, headers: Dict[str, str], timeout: int) -> RequestsHttpResponse:
+    def get(
+        self, url: str, *, headers: Dict[str, str], timeout: int
+    ) -> RequestsHttpResponse:
         try:
             response = requests.get(url, headers=headers, timeout=timeout)
             return RequestsHttpResponse(response)
         except requests.Timeout as exc:
             raise ScraperTimeoutError(f"Timed out fetching {url}", cause=exc) from exc
         except requests.RequestException as exc:
-            raise ScraperNetworkError(f"Network error fetching {url}", cause=exc) from exc
+            raise ScraperNetworkError(
+                f"Network error fetching {url}", cause=exc
+            ) from exc

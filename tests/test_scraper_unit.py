@@ -27,7 +27,10 @@ def test_parse_events_extracts_basic_fields():
     dates = {event["date"] for event in events}
 
     assert "NYC Tech Meetup" in titles
-    assert any(url.startswith("https://www.garysguide.com/") and url.endswith("/123") for url in urls)
+    assert any(
+        url.startswith("https://www.garysguide.com/") and url.endswith("/123")
+        for url in urls
+    )
     assert "FREE" in prices
     assert "$10" in prices
     assert any("Thu Feb 06" in date for date in dates)
@@ -81,7 +84,9 @@ def test_extract_price_from_table_row_last_cell():
 
 def test_extract_date_and_price_prefers_table_row():
     scraper = GarysGuideScraper(delay_seconds=0)
-    row = _first_tag("<tr><td>Thu Feb 06</td><td><a href='/events/1'>AI Event</a></td><td>FREE</td></tr>")
+    row = _first_tag(
+        "<tr><td>Thu Feb 06</td><td><a href='/events/1'>AI Event</a></td><td>FREE</td></tr>"
+    )
     assert row is not None
     date, price = scraper._extract_date_and_price_from_element(row)
     assert date == "Thu Feb 06"
@@ -199,7 +204,7 @@ def test_extract_event_from_element_is_pure_delegation():
 
 
 def test_parse_events_extracts_date_and_time_from_outer_table_row_structure():
-        html = """
+    html = """
         <table>
             <tr>
                 <td align='center' valign='top' width='48'><b>Feb 25</b><br/>7:00pm</td>
@@ -215,12 +220,12 @@ def test_parse_events_extracts_date_and_time_from_outer_table_row_structure():
             </tr>
         </table>
         """
-        scraper = GarysGuideScraper(delay_seconds=0)
-        events = scraper.parse_events(html)
-        assert len(events) == 1
-        assert events[0]["date"] == "Feb 25"
-        assert events[0]["time"] == "7:00PM"
-        assert "Cloud One Lounge" in events[0]["location"]
+    scraper = GarysGuideScraper(delay_seconds=0)
+    events = scraper.parse_events(html)
+    assert len(events) == 1
+    assert events[0]["date"] == "Feb 25"
+    assert events[0]["time"] == "7:00PM"
+    assert "Cloud One Lounge" in events[0]["location"]
 
 
 def test_scraper_uses_injected_http_client():

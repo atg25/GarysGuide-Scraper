@@ -2,7 +2,11 @@ import pytest
 
 from garys_nyc_events.config import PipelineConfig
 from garys_nyc_events.exceptions import ScraperNetworkError
-from garys_nyc_events.runner_once import PartialScrapeError, is_transient_error, run_once
+from garys_nyc_events.runner_once import (
+    PartialScrapeError,
+    is_transient_error,
+    run_once,
+)
 from garys_nyc_events.scheduler import validate_cron_schedule
 from garys_nyc_events.storage import SQLiteEventStore
 
@@ -26,12 +30,21 @@ def test_retry_on_transient_error(tmp_path, monkeypatch):
         calls["count"] += 1
         if calls["count"] == 1:
             raise ScraperNetworkError("temporary timeout")
-        return [{"title": "AI Event", "url": "https://www.garysguide.com/events/1", "price": "FREE", "date": "Wed"}]
+        return [
+            {
+                "title": "AI Event",
+                "url": "https://www.garysguide.com/events/1",
+                "price": "FREE",
+                "date": "Wed",
+            }
+        ]
 
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
 
     summary = run_once(
-        config=PipelineConfig(db_path=str(db_path), retry_attempts=3, retry_backoff_seconds=0.01),
+        config=PipelineConfig(
+            db_path=str(db_path), retry_attempts=3, retry_backoff_seconds=0.01
+        ),
         scrape_func=fake_scrape,
         store=store,
     )
@@ -53,7 +66,9 @@ def test_no_retry_on_non_transient_error(tmp_path):
 
     with pytest.raises(ValueError):
         run_once(
-            config=PipelineConfig(db_path=str(db_path), retry_attempts=5, retry_backoff_seconds=0.01),
+            config=PipelineConfig(
+                db_path=str(db_path), retry_attempts=5, retry_backoff_seconds=0.01
+            ),
             scrape_func=fake_scrape,
             store=store,
         )
@@ -74,7 +89,9 @@ def test_run_once_records_failure_on_unrecoverable_network_error(tmp_path):
         raise ScraperNetworkError("outage")
 
     summary = run_once(
-        config=PipelineConfig(db_path=str(db_path), retry_attempts=2, retry_backoff_seconds=0.01),
+        config=PipelineConfig(
+            db_path=str(db_path), retry_attempts=2, retry_backoff_seconds=0.01
+        ),
         scrape_func=fake_scrape,
         store=store,
     )

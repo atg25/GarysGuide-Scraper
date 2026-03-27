@@ -1,5 +1,7 @@
 from datetime import date
 
+import sqlite3
+
 from garys_nyc_events.storage import SQLiteEventStore
 
 
@@ -32,7 +34,7 @@ def test_successful_write_and_snapshot(tmp_path):
                 "title": "AI Summit",
                 "url": "https://www.garysguide.com/events/1",
                 "price": "FREE",
-                    "date": "2026-02-27",
+                "date": "2026-02-27",
             }
         ],
         today=date(2026, 2, 26),
@@ -361,3 +363,54 @@ def test_fetch_events_ai_only_returns_empty_for_no_matches(tmp_path):
     )
 
     assert store.fetch_events(ai_only=True) == []
+
+
+def test_refresh_weekly_ignores_date_found_cutoff(tmp_path):
+    db_path = tmp_path / "events.db"
+    store = SQLiteEventStore(str(db_path))
+    store.init_schema()
+
+    store.persist_run(
+        source="web",
+        fetched_at="2026-02-17T00:00:00+00:00",
+        search_term="",
+        record_limit=10,
+        status="success",
+        attempts=1,
+        error="",
+        events=[
+            {
+                "title": "AI Near-term",
+                "url": "https://www.garysguide.com/events/10",
+                "price": "FREE",
+                "date": "2026-03-02",
+                "description": "ai meetup",
+            },
+        ],
+        today=date(2026, 2, 26),
+    )
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            'UPDATE "all events" SET date_found = ?', ("1999-01-01T00:00:00+00:00",)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    store.persist_run(
+        source="web",
+        fetched_at="2026-02-18T00:00:00+00:00",
+        search_term="",
+        record_limit=10,
+        status="success",
+        attempts=1,
+        error="",
+        events=[],
+        today=date(2026, 2, 26),
+    )
+
+    events = store.fetch_events(limit=0, ai_only=False)
+    assert len(events) == 1
+    assert events[0]["title"] == "AI Near-term"

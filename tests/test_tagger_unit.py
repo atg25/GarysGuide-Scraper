@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from garys_nyc_events.config import PipelineConfig
 from garys_nyc_events.storage import SQLiteEventStore
@@ -45,38 +45,41 @@ def test_tagger_returns_empty_list_on_network_failure():
 
 
 def test_tagger_returns_empty_list_on_malformed_json():
-    tagger = GeminiTagger(api_key="x", session=_Session(_Response(_gemini_payload("not json"))))
+    tagger = GeminiTagger(
+        api_key="x", session=_Session(_Response(_gemini_payload("not json")))
+    )
     assert tagger.tag_event({"title": "AI"}) == []
 
 
 def test_tagger_returns_empty_list_on_non_list_json():
     text = json.dumps({"key": "value"})
-    tagger = GeminiTagger(api_key="x", session=_Session(_Response(_gemini_payload(text))))
+    tagger = GeminiTagger(
+        api_key="x", session=_Session(_Response(_gemini_payload(text)))
+    )
     assert tagger.tag_event({"title": "AI"}) == []
 
 
 def test_tagger_parses_valid_response():
     text = json.dumps(["ai", "workshop", "free"])
-    tagger = GeminiTagger(api_key="x", session=_Session(_Response(_gemini_payload(text))))
+    tagger = GeminiTagger(
+        api_key="x", session=_Session(_Response(_gemini_payload(text)))
+    )
     assert tagger.tag_event({"title": "AI"}) == ["ai", "workshop", "free"]
 
 
 def test_tagger_truncates_to_max_tags():
     text = json.dumps([str(index) for index in range(10)])
-    tagger = GeminiTagger(api_key="x", session=_Session(_Response(_gemini_payload(text))), max_tags=5)
+    tagger = GeminiTagger(
+        api_key="x", session=_Session(_Response(_gemini_payload(text))), max_tags=5
+    )
     assert len(tagger.tag_event({"title": "AI"})) == 5
-
-
-def test_tagger_uses_fallback_env_var_name(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("GEMNINI_API_KEY", "fallback-key")
-    tagger = GeminiTagger()
-    assert tagger.is_available() is True
 
 
 def test_tag_events_adds_tags_key_to_all_events():
     text = json.dumps(["ai"])
-    tagger = GeminiTagger(api_key="x", session=_Session(_Response(_gemini_payload(text))))
+    tagger = GeminiTagger(
+        api_key="x", session=_Session(_Response(_gemini_payload(text)))
+    )
     events = [{"title": "A"}, {"title": "B"}]
     tagged = tagger.tag_events(events)
     assert all("tags" in event for event in tagged)
@@ -148,7 +151,13 @@ def test_tags_column_survives_schema_migration(tmp_path):
 def test_tagging_disabled_via_config_flag(monkeypatch):
     class _Scraper:
         def get_events(self):
-            return [{"title": "AI", "description": "AI", "date": "2026-02-27"}]
+            return [
+                {
+                    "title": "AI",
+                    "description": "AI",
+                    "date": str(date.today() + timedelta(days=1)),
+                }
+            ]
 
     from garys_nyc_events import runner_once as runner
 
@@ -157,3 +166,28 @@ def test_tagging_disabled_via_config_flag(monkeypatch):
     cfg = PipelineConfig(scraper_search_term="", tagging_enabled=False)
     events = _run_scrape(cfg)
     assert events[0]["tags"] == []
+
+
+def test_run_scrape_keeps_only_upcoming_week(monkeypatch):
+    class _Scraper:
+        def get_events(self):
+            return [
+                {
+                    "title": "Soon",
+                    "description": "AI",
+                    "date": str(date.today() + timedelta(days=1)),
+                },
+                {
+                    "title": "Later",
+                    "description": "AI",
+                    "date": str(date.today() + timedelta(days=9)),
+                },
+            ]
+
+    from garys_nyc_events import runner_once as runner
+
+    monkeypatch.setattr(runner, "_default_scraper", lambda _cfg: _Scraper())
+
+    cfg = PipelineConfig(scraper_search_term="", tagging_enabled=False)
+    events = _run_scrape(cfg)
+    assert [event["title"] for event in events] == ["Soon"]

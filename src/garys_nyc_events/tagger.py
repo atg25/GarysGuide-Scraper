@@ -35,7 +35,7 @@ class GeminiTagger:
         session: Optional[requests.Session] = None,
         max_tags: int = 7,
     ) -> None:
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GEMNINI_API_KEY")
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.session = session or requests.Session()
         self.max_tags = max_tags
 

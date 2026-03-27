@@ -9,9 +9,16 @@ from typing import Callable, Dict, List, Optional
 
 from .config import PipelineConfig, load_config_from_env
 from .exceptions import ScraperNetworkError
-from .filters import filter_ai_events, filter_events_by_keyword, filter_events_upcoming_week
+from .filters import (
+    filter_ai_events,
+    filter_events_by_keyword,
+    filter_events_upcoming_week,
+)
 from .protocols import EventScraper, EventStore
-from .scheduler import backoff_seconds, is_transient_error as scheduler_is_transient_error
+from .scheduler import (
+    backoff_seconds,
+    is_transient_error as scheduler_is_transient_error,
+)
 from .tagger import GeminiTagger
 
 
@@ -19,7 +26,9 @@ logger = logging.getLogger("garys_nyc_events.runner")
 
 
 class PartialScrapeError(Exception):
-    def __init__(self, message: str, partial_events: Optional[List[Dict[str, str]]] = None) -> None:
+    def __init__(
+        self, message: str, partial_events: Optional[List[Dict[str, str]]] = None
+    ) -> None:
         super().__init__(message)
         self.partial_events = partial_events or []
 
@@ -34,17 +43,14 @@ class RunSummary:
     error: str
 
 
-
 def is_transient_error(exc: Exception) -> bool:
     return scheduler_is_transient_error(exc)
-
 
 
 def _default_scraper(_config: PipelineConfig) -> EventScraper:
     from .scraper import GarysGuideScraper
 
     return GarysGuideScraper()
-
 
 
 def _run_scrape(config: PipelineConfig) -> List[Dict[str, str]]:
@@ -57,9 +63,11 @@ def _run_scrape(config: PipelineConfig) -> List[Dict[str, str]]:
     if config.scraper_search_term:
         events = filter_events_by_keyword(events, config.scraper_search_term)
 
+    # Keep each run focused on events in the upcoming seven days.
+    events = filter_events_upcoming_week(events)
+
     if config.scraper_search_term.strip().lower() == "ai":
         events = filter_ai_events(events)
-        events = filter_events_upcoming_week(events)
 
     if config.scraper_limit > 0:
         events = events[: config.scraper_limit]
@@ -76,7 +84,6 @@ def _run_scrape(config: PipelineConfig) -> List[Dict[str, str]]:
     return events
 
 
-
 def run_once(
     config: Optional[PipelineConfig] = None,
     scrape_func: Optional[Callable[[PipelineConfig], List[Dict[str, str]]]] = None,
@@ -86,12 +93,14 @@ def run_once(
     scrape = scrape_func or _run_scrape
     event_store = store or _default_store(cfg)
     event_store.init_schema()
+    fetched_at_dt = datetime.now(timezone.utc)
 
     attempts = 0
+    max_attempts = max(1, cfg.retry_attempts)
     events: List[Dict[str, str]] = []
     error_message = ""
 
-    while attempts < max(1, cfg.retry_attempts):
+    while attempts < max_attempts:
         attempts += 1
         try:
             events = scrape(cfg)
@@ -103,10 +112,15 @@ def run_once(
             break
         except ScraperNetworkError as exc:
             error_message = str(exc)
-            if attempts >= max(1, cfg.retry_attempts) or not is_transient_error(exc):
+            if attempts >= max_attempts or not is_transient_error(exc):
                 break
             sleep_seconds = backoff_seconds(cfg.retry_backoff_seconds, attempts)
-            logger.warning("Transient error on attempt %s: %s. Retrying in %ss", attempts, exc, sleep_seconds)
+            logger.warning(
+                "Transient error on attempt %s: %s. Retrying in %ss",
+                attempts,
+                exc,
+                sleep_seconds,
+            )
             time.sleep(sleep_seconds)
 
     if events and error_message:
@@ -120,13 +134,14 @@ def run_once(
 
     run_record = event_store.persist_run(
         source=cfg.scraper_strategy,
-        fetched_at=datetime.now(timezone.utc).isoformat(),
+        fetched_at=fetched_at_dt.isoformat(),
         search_term=cfg.scraper_search_term,
         record_limit=cfg.scraper_limit,
         status=status,
         attempts=attempts,
         error=error_message,
         events=events,
+        today=fetched_at_dt.date(),
     )
 
     summary = RunSummary(
@@ -157,21 +172,26 @@ def _default_store(config: PipelineConfig) -> EventStore:
     return SQLiteEventStore(config.db_path)
 
 
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run GarysGuide scraper once and persist to SQLite")
+    parser = argparse.ArgumentParser(
+        description="Run GarysGuide scraper once and persist to SQLite"
+    )
     parser.add_argument("--db-path", help="Override DB path for one-shot runs")
     parser.add_argument("--search-term", help="Override search term")
     parser.add_argument("--limit", type=int, help="Override event limit")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
 
     cfg = load_config_from_env()
     if args.db_path:
         cfg = PipelineConfig(**{**cfg.__dict__, "db_path": args.db_path})
     if args.search_term is not None:
-        cfg = PipelineConfig(**{**cfg.__dict__, "scraper_search_term": args.search_term})
+        cfg = PipelineConfig(
+            **{**cfg.__dict__, "scraper_search_term": args.search_term}
+        )
     if args.limit is not None:
         cfg = PipelineConfig(**{**cfg.__dict__, "scraper_limit": args.limit})
 
