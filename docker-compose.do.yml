@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  api:
+    image: python:3.11-slim
+    container_name: garys_api
+    working_dir: /app
+    command: >
+      bash -c "
+      pip install -q poetry &&
+      poetry install --only main &&
+      poetry run python -m uvicorn garys_nyc_events.api.app:app --host 0.0.0.0 --port 8000
+      "
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./garys_events.db:/app/garys_events.db
+    environment:
+      - DB_PATH=/app/garys_events.db
+      - API_TOKEN=${API_TOKEN}
+      - GARYS_EVENTS_REST_API_BASE_URL=http://142.93.3.242:8000
+      - GARYS_EVENTS_MCP_ENABLED=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
